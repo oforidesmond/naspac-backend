@@ -7,21 +7,23 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { InitOnboardingDto } from '../users/dto/init-onboarding.dto';
 import { JwtAuthGuard } from 'src/common/guards/auth-guard';
 import { RolesGuard } from 'src/common/guards/roles-guard';
+import { LoginStaffAdminDto } from './dto/login-staff-admin.dto';
+import { LoginPersonnelDto } from './dto/login-personnel.dto';
 
 @Controller('auth')
 export class AuthController {
   constructor(private authService: AuthService) {}
 
-  @Post('login-personnel')
+    @Post('login-personnel')
   @UseGuards(RateLimitGuard, CaptchaGuard)
-  async loginPersonnel(@Body() body: { nssNumber: string; password: string; captchaToken: string }) {
+  async loginPersonnel(@Body() body: LoginPersonnelDto) {
     return this.authService.login(body.nssNumber, body.password);
   }
 
   @Post('login-staff-admin')
   @UseGuards(RateLimitGuard, CaptchaGuard)
-  async loginStaffAdmin(@Body() body: { nssNumber: string; password: string; captchaToken: string }) {
-    return this.authService.login(body.nssNumber, body.password);
+  async loginStaffAdmin(@Body() body: LoginStaffAdminDto) {
+    return this.authService.login(body.staffId, body.password);
   }
 
   @Post('init-onboarding')

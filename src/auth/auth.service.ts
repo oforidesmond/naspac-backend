@@ -12,8 +12,8 @@ export class AuthService {
     private notificationsService: NotificationsService,
   ) {}
 
-  async validateUser(nssNumber: string, password: string): Promise<any> {
-    const user = await this.usersService.findByNssNumber(nssNumber);
+  async validateUser(identifier: string, password: string): Promise<any> {
+    const user = await this.usersService.findByNssNumberOrStaffId(identifier);
     if (!user) {
       throw new HttpException('Invalid credentials', HttpStatus.UNAUTHORIZED);
     }
@@ -23,12 +23,12 @@ export class AuthService {
       throw new HttpException('Invalid credentials', HttpStatus.UNAUTHORIZED);
     }
 
-    return { id: user.id, nssNumber: user.nssNumber, role: user.role };
+    return { id: user.id, nssNumber: user.nssNumber, staffId: user.staffId, role: user.role };
   }
 
-  async login(nssNumber: string, password: string) {
-    const user = await this.validateUser(nssNumber, password);
-    const payload = { sub: user.id, nssNumber: user.nssNumber, role: user.role };
+  async login(identifier: string, password: string) {
+    const user = await this.validateUser(identifier, password);
+    const payload = { sub: user.id, identifier: user.nssNumber || user.staffId, role: user.role };
     return {
       accessToken: this.jwtService.sign(payload),
     };
@@ -41,7 +41,7 @@ export class AuthService {
     }
 
     // Check if NSS number already exists
-    const existingUser = await this.usersService.findByNssNumber(nssNumber);
+    const existingUser = await this.usersService.findByNssNumberOrStaffId(nssNumber);
     if (existingUser) {
       throw new HttpException('NSS number already registered', HttpStatus.BAD_REQUEST);
     }

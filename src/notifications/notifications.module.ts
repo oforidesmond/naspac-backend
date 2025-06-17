@@ -6,12 +6,13 @@ import { EmailProcessor } from './email.processor';
 
 @Module({
   imports: [
+    ConfigModule.forRoot(), // Ensure ConfigService is available
     BullModule.registerQueueAsync({
       name: 'email',
       useFactory: async (configService: ConfigService) => ({
-        redis: configService.get<string>('REDIS_URL'),
+        redis: configService.get<string>('REDIS_URL'), // Pass REDIS_URL directly
       }),
-      inject: [ConfigModule],
+      inject: [ConfigService],
     }),
   ],
   providers: [NotificationsService, EmailProcessor],

@@ -47,6 +47,7 @@ lerna-debug.log*
 .temp
 .tmp
 generate-cert.js
+seed.js
 
 # Runtime data
 pids

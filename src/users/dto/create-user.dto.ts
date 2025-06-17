@@ -1,9 +1,14 @@
-import { IsString, IsEmail, IsEnum } from 'class-validator';
+import { IsString, IsEmail, IsEnum, IsOptional } from 'class-validator';
 import { Role } from '@prisma/client';
 
 export class CreateUserDto {
+   @IsString()
+  @IsOptional()
+  nssNumber?: string;
+
   @IsString()
-  nssNumber: string;
+  @IsOptional()
+  staffId?: string;
 
   @IsEmail()
   email: string;

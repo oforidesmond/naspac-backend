@@ -10,7 +10,8 @@ datasource db {
 
 model User {
   id          Int      @id @default(autoincrement())
-  nssNumber   String   @unique
+  nssNumber   String?  @unique
+  staffId     String?  @unique
   email       String?  @unique
   password    String?
   role        Role     @default(PERSONNEL)

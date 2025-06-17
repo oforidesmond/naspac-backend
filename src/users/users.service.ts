@@ -7,21 +7,29 @@ import { PrismaService } from 'prisma/prisma.service';
 export class UsersService {
   constructor(private prisma: PrismaService) {}
 
- async createUser(dto: CreateUserDto) {
-  const hashedPassword = await bcrypt.hash(dto.password, 10);
-  return this.prisma.user.create({
-    data: {
-      nssNumber: dto.nssNumber,
-      email: dto.email,
-      password: hashedPassword,
-      role: dto.role,
-    },
-  });
-}
+async createUser(dto: CreateUserDto) {
+    const hashedPassword = await bcrypt.hash(dto.password, 10);
+    return this.prisma.user.create({
+      data: {
+        nssNumber: dto.nssNumber,
+        staffId: dto.staffId,
+        email: dto.email,
+        password: hashedPassword,
+        role: dto.role,
+      },
+    });
+  }
 
-async findByNssNumber(nssNumber: string) {
-  return this.prisma.user.findUnique({ where: { nssNumber } });
-}
+  async findByNssNumberOrStaffId(identifier: string) {
+    return this.prisma.user.findFirst({
+      where: {
+        OR: [
+          { nssNumber: identifier },
+          { staffId: identifier },
+        ],
+      },
+    });
+  }
 
   async findById(id: number) {
     return this.prisma.user.findUnique({ where: { id } });

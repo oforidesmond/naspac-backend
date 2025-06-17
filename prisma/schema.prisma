@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -11,4 +5,57 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id          Int      @id @default(autoincrement())
+  nssNumber   String   @unique
+  email       String?  @unique
+  password    String?
+  role        Role     @default(PERSONNEL)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  submissions Submission[]
+}
+
+model Submission {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  fullName    String
+  school      String
+  course      String
+  status      SubmissionStatus @default(PENDING)
+  postingLetterUrl String?
+  endorsedLetterUrl String?
+  validatedDocsUrl String?
+  appointmentLetterUrl String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id])
+  auditLogs   AuditLog[]
+}
+
+model AuditLog {
+  id          Int      @id @default(autoincrement())
+  submissionId Int
+  action      String
+  userId      Int?
+  details     String?
+  createdAt   DateTime @default(now())
+  submission  Submission @relation(fields: [submissionId], references: [id])
+}
+
+enum Role {
+  PERSONNEL
+  STAFF
+  ADMIN
+}
+
+enum SubmissionStatus {
+  PENDING
+  ENDORSED
+  REJECTED
+  VALIDATED
+  COMPLETED
 }

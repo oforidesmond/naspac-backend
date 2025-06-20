@@ -15,19 +15,19 @@ export class AuthController {
   constructor(private authService: AuthService) {}
 
     @Post('login-personnel')
-  @UseGuards(RateLimitGuard, CaptchaGuard)
+  @UseGuards(RateLimitGuard)
   async loginPersonnel(@Body() body: LoginPersonnelDto) {
     return this.authService.login(body.nssNumber, body.password);
   }
 
   @Post('login-staff-admin')
-  @UseGuards(RateLimitGuard, CaptchaGuard)
+  @UseGuards(RateLimitGuard)
   async loginStaffAdmin(@Body() body: LoginStaffAdminDto) {
     return this.authService.login(body.staffId, body.password);
   }
 
   @Post('init-onboarding')
-  @UseGuards(JwtAuthGuard, RolesGuard, RateLimitGuard, CaptchaGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, RateLimitGuard)
   @Roles('STAFF', 'ADMIN')
   async initOnboarding(@Body() body: InitOnboardingDto, @Request() req) {
     return this.authService.initOnboarding(body.nssNumber, body.email, req.user);

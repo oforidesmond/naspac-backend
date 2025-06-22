@@ -40,36 +40,36 @@ export class AuthService {
   }
 
   // Validate PERSONNEL user
-  async validatePersonnel(nssNumber: string, password: string): Promise<any> {
-    const user = await this.usersService.findByNssNumber(nssNumber); // Specific method for nssNumber
+ async validatePersonnel(nssNumber: string, password: string): Promise<any> {
+  let user = await this.usersService.findByNssNumber(nssNumber);
 
-    // If not found, try with current year appended
-    if (!user) {
-      const currentYear = new Date().getFullYear();
-      const nssNumberWithYear = `${nssNumber}${currentYear}`;
-      const userWithYear = await this.usersService.findByNssNumber(nssNumberWithYear);
-      if (!userWithYear) {
-        throw new HttpException('Invalid NSS number or password', HttpStatus.UNAUTHORIZED);
-      }
-      return userWithYear;
-    }
-
-    // Restrict to PERSONNEL role (adjust based on your roles)
-    if (user.role !== 'PERSONNEL') {
-      throw new HttpException(
-        'Access denied. Only Personnel role is allowed.',
-        HttpStatus.FORBIDDEN,
-      );
-    }
-
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    if (!isPasswordValid) {
-      throw new HttpException('Invalid NSS number or password', HttpStatus.UNAUTHORIZED);
-    }
-
-    return { id: user.id, nssNumber: user.nssNumber, role: user.role };
+  // If not found, try with current year appended
+  if (!user) {
+    const currentYear = new Date().getFullYear();
+    const nssNumberWithYear = `${nssNumber}${currentYear}`;
+    user = await this.usersService.findByNssNumber(nssNumberWithYear);
   }
 
+  if (!user) {
+    throw new HttpException('Invalid NSS number or password', HttpStatus.UNAUTHORIZED);
+  }
+
+  // Restrict to PERSONNEL role
+  if (user.role !== 'PERSONNEL') {
+    throw new HttpException(
+      'Access denied. Only Personnel role is allowed.',
+      HttpStatus.FORBIDDEN,
+    );
+  }
+
+  // Validate password
+  const isPasswordValid = await bcrypt.compare(password, user.password);
+  if (!isPasswordValid) {
+    throw new HttpException('Invalid NSS number or password', HttpStatus.UNAUTHORIZED);
+  }
+
+  return { id: user.id, nssNumber: user.nssNumber, role: user.role };
+}
   // Login for STAFF or ADMIN
   async loginStaffAdmin(staffId: string, password: string) {
     const user = await this.validateStaffAdmin(staffId, password);

@@ -14,7 +14,7 @@ export class NotificationsService {
         subject: 'COCOBOD NSS Onboarding',
         content: `
           <h1>Welcome to COCOBOD NSS Onboarding!</h1>
-          <p>Click <a href="http://localhost:3000/onboarding-reset-password?nssNumber=${nssNumber}&token=${token}">here</a> to set your password and begin onboarding.</p>
+          <p>Click <a href="http://localhost:5173/reset-password?nssNumber=${nssNumber}&token=${token}">here</a> to set your password and begin onboarding.</p>
           <p>This link expires in 1 hour.</p>
         `,
       },

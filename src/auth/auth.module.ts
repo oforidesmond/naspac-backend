@@ -9,6 +9,7 @@ import { JwtStrategy } from './jwt.strategy';
 import { NotificationsModule } from 'src/notifications/notifications.module';
 import { HttpModule } from '@nestjs/axios';
 import { CaptchaGuard } from './captcha.guard';
+import { PrismaService } from 'prisma/prisma.service';
 
 @Module({
   imports: [
@@ -27,7 +28,7 @@ import { CaptchaGuard } from './captcha.guard';
     ConfigModule,
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, CaptchaGuard],
+  providers: [AuthService, JwtStrategy, CaptchaGuard, PrismaService],
   exports: [AuthService],
 })
 export class AuthModule {}

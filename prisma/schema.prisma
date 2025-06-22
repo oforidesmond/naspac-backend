@@ -17,6 +17,8 @@ model User {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   submissions Submission[]
+  passwordResetTokens PasswordResetToken[]
+  OnboardingToken  OnboardingToken []
 }
 
 model Submission {
@@ -44,6 +46,26 @@ model AuditLog {
   details     String?
   createdAt   DateTime @default(now())
   submission  Submission @relation(fields: [submissionId], references: [id])
+}
+
+model PasswordResetToken {
+  id        Int      @id @default(autoincrement())
+  token     String   @unique
+  userId    Int
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+model OnboardingToken {
+  id        Int      @id @default(autoincrement())
+  token     String   @unique
+  nssNumber String   @unique
+  userId    Int
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
 }
 
 enum Role {

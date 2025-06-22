@@ -9,21 +9,24 @@ import { JwtAuthGuard } from 'src/common/guards/auth-guard';
 import { RolesGuard } from 'src/common/guards/roles-guard';
 import { LoginStaffAdminDto } from './dto/login-staff-admin.dto';
 import { LoginPersonnelDto } from './dto/login-personnel.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { RequestForgotPasswordDto } from './dto/request-forgot-password.dto';
+import { OnboardingResetPasswordDto } from './dto/onboarding-reset-password.dto';
 
 @Controller('auth')
 export class AuthController {
   constructor(private authService: AuthService) {}
 
-    @Post('login-personnel')
+  @Post('login-personnel')
   @UseGuards(RateLimitGuard)
   async loginPersonnel(@Body() body: LoginPersonnelDto) {
-    return this.authService.login(body.nssNumber, body.password);
+    return this.authService.loginPersonnel(body.nssNumber, body.password);
   }
 
   @Post('login-staff-admin')
   @UseGuards(RateLimitGuard)
   async loginStaffAdmin(@Body() body: LoginStaffAdminDto) {
-    return this.authService.login(body.staffId, body.password);
+    return this.authService.loginStaffAdmin(body.staffId, body.password);
   }
 
   @Post('init-onboarding')
@@ -31,5 +34,28 @@ export class AuthController {
   @Roles('STAFF', 'ADMIN')
   async initOnboarding(@Body() body: InitOnboardingDto, @Request() req) {
     return this.authService.initOnboarding(body.nssNumber, body.email, req.user);
+  }
+
+   @Post('request-forgot-password')
+  @UseGuards(RateLimitGuard)
+  async requestForgotPassword(@Body() body: RequestForgotPasswordDto) {
+    return this.authService.requestForgotPassword(body.email);
+  }
+
+  @Post('forgot-password')
+  @UseGuards(RateLimitGuard)
+  async forgotPassword(@Body() body: ForgotPasswordDto) {
+    return this.authService.forgotPassword(body.token, body.password);
+  }
+
+  @Post('onboarding-reset-password')
+  @UseGuards(RateLimitGuard)
+  async onboardingResetPassword(@Body() body: OnboardingResetPasswordDto) {
+    return this.authService.onboardingResetPassword(
+      body.nssNumber,
+      body.token,
+      body.password,
+      body.confirmPassword,
+    );
   }
 }

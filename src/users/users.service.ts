@@ -8,19 +8,32 @@ export class UsersService {
   constructor(private prisma: PrismaService) {}
 
 async createUser(dto: CreateUserDto) {
-    const hashedPassword = await bcrypt.hash(dto.password, 10);
-    return this.prisma.user.create({
-      data: {
-        nssNumber: dto.nssNumber,
-        staffId: dto.staffId,
-        email: dto.email,
-        password: hashedPassword,
-        role: dto.role,
-      },
+  const hashedPassword = dto.password ? await bcrypt.hash(dto.password, 10) : null;
+  return this.prisma.user.create({
+    data: {
+      nssNumber: dto.nssNumber ?? null,
+      staffId: dto.staffId ?? null,
+      email: dto.email ?? null,
+      password: hashedPassword,
+      role: dto.role,
+    },
+  });
+}
+
+   async findByStaffId(staffId: string) {
+    return this.prisma.user.findUnique({
+      where: { staffId },
     });
   }
 
-  async findByNssNumberOrStaffId(identifier: string) {
+  async findByNssNumber(nssNumber: string) {
+    return this.prisma.user.findUnique({
+      where: { nssNumber },
+    });
+  }
+
+
+    async findByNssNumberOrStaffId(identifier: string) {
     return this.prisma.user.findFirst({
       where: {
         OR: [
@@ -40,5 +53,9 @@ async createUser(dto: CreateUserDto) {
       data.password = await bcrypt.hash(data.password, 10);
     }
     return this.prisma.user.update({ where: { id }, data });
+  }
+
+  async findByEmail(email: string) {
+  return this.prisma.user.findUnique({ where: { email } });
   }
 }

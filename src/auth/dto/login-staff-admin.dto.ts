@@ -1,4 +1,4 @@
-import { IsString } from 'class-validator';
+import { IsOptional, IsString } from 'class-validator';
 
 export class LoginStaffAdminDto {
   @IsString()
@@ -7,6 +7,7 @@ export class LoginStaffAdminDto {
   @IsString()
   password: string;
 
-  @IsString()
-  captchaToken: string;
+   @IsString()
+  @IsOptional()
+  captchaToken?: string;
 }

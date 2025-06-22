@@ -11,10 +11,12 @@ export class CreateUserDto {
   staffId?: string;
 
   @IsEmail()
-  email: string;
+  @IsOptional()
+  email?: string;
 
   @IsString()
-  password: string;
+  @IsOptional()
+  password?: string;
 
   @IsEnum(Role)
   role: Role;

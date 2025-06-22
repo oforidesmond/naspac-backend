@@ -6,16 +6,36 @@ import { InjectQueue } from '@nestjs/bull';
 export class NotificationsService {
   constructor(@InjectQueue('email') private emailQueue: Queue) {}
 
-  async sendOnboardingEmail(to: string, tempPassword: string) {
+  async sendOnboardingEmail(to: string, nssNumber: string, token: string) {
     await this.emailQueue.add(
       'send-email',
       {
         to,
-        subject: 'COCOBOD NSS Onboarding Link',
+        subject: 'COCOBOD NSS Onboarding',
         content: `
           <h1>Welcome to COCOBOD NSS Onboarding!</h1>
-          <p>Your temporary password is: <strong>${tempPassword}</strong></p>
-          <p>Click <a href="http://localhost:3000/reset-password">here</a> to reset your password and begin onboarding.</p>
+          <p>Click <a href="http://localhost:3000/onboarding-reset-password?nssNumber=${nssNumber}&token=${token}">here</a> to set your password and begin onboarding.</p>
+          <p>This link expires in 1 hour.</p>
+        `,
+      },
+      {
+        attempts: 3,
+        backoff: 5000,
+      },
+    );
+  }
+
+  async sendForgotPasswordEmail(to: string, token: string) {
+    await this.emailQueue.add(
+      'send-email',
+      {
+        to,
+        subject: 'COCOBOD Password Reset',
+        content: `
+          <h1>Password Reset Request</h1>
+          <p>You requested to reset your password.</p>
+          <p>Click <a href="http://localhost:3000/forgot-password?token=${token}">here</a> to reset your password.</p>
+          <p>This link expires in 1 hour.</p>
         `,
       },
       {

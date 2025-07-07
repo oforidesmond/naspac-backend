@@ -9,6 +9,7 @@ datasource db {
 
 model User {
   id          Int      @id @default(autoincrement())
+  name       String? 
   nssNumber   String?  @unique
   staffId     String?  @unique
   email       String?  @unique
@@ -16,6 +17,7 @@ model User {
   role        Role     @default(PERSONNEL)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
   submissions Submission[]
   passwordResetTokens PasswordResetToken[]
   OnboardingToken  OnboardingToken []
@@ -23,19 +25,27 @@ model User {
 
 model Submission {
   id          Int      @id @default(autoincrement())
-  userId      Int
+  userId      Int      @unique
   fullName    String
-  school      String
-  course      String
+  nssNumber   String
+  gender      Gender
+  email       String
+  placeOfResidence  String
+  phoneNumber      String
+  universityAttended   String
+  regionOfSchool    String
+  yearOfNss         Int
+  programStudied    String
+  divisionPostedTo  String
   status      SubmissionStatus @default(PENDING)
-  postingLetterUrl String?
-  endorsedLetterUrl String?
-  validatedDocsUrl String?
-  appointmentLetterUrl String?
+  postingLetterUrl String
+  appointmentLetterUrl String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  deletedAt           DateTime?
   user        User     @relation(fields: [userId], references: [id])
   auditLogs   AuditLog[]
+  @@unique([userId, nssNumber])
 }
 
 model AuditLog {
@@ -54,6 +64,7 @@ model PasswordResetToken {
   userId    Int
   expiresAt DateTime
   createdAt DateTime @default(now())
+  deletedAt DateTime?
   user      User     @relation(fields: [userId], references: [id])
 }
 
@@ -65,6 +76,7 @@ model OnboardingToken {
   expiresAt DateTime
   used      Boolean  @default(false)
   createdAt DateTime @default(now())
+  deletedAt DateTime?
   user      User     @relation(fields: [userId], references: [id])
 }
 
@@ -80,4 +92,9 @@ enum SubmissionStatus {
   REJECTED
   VALIDATED
   COMPLETED
+}
+
+enum Gender {
+  MALE
+  FEMALE
 }

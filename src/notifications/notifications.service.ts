@@ -34,7 +34,7 @@ export class NotificationsService {
         content: `
           <h1>Password Reset Request</h1>
           <p>You requested to reset your password.</p>
-          <p>Click <a href="http://localhost:3000/forgot-password?token=${token}">here</a> to reset your password.</p>
+          <p>Click <a href="http://localhost:5173/reset-password?token=${token}">here</a> to reset your password.</p>
           <p>This link expires in 1 hour.</p>
         `,
       },

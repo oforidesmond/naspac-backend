@@ -68,24 +68,30 @@ export class AuthService {
     throw new HttpException('Invalid NSS number or password', HttpStatus.UNAUTHORIZED);
   }
 
-  return { id: user.id, nssNumber: user.nssNumber, role: user.role };
+  return { id: user.id, nssNumber: user.nssNumber, role: user.role, email: user.email };
 }
   // Login for STAFF or ADMIN
   async loginStaffAdmin(staffId: string, password: string) {
     const user = await this.validateStaffAdmin(staffId, password);
-    const payload = { sub: user.id, identifier: user.staffId, role: user.role };
+    const payload = { sub: user.id, identifier: user.staffId, role: user.role, email: user.email };
     return {
       accessToken: this.jwtService.sign(payload),
+      role: user.role,
     };
   }
 
   // Login for PERSONNEL
   async loginPersonnel(nssNumber: string, password: string) {
     const user = await this.validatePersonnel(nssNumber, password);
-    const payload = { sub: user.id, identifier: user.nssNumber, role: user.role };
+    const payload = { sub: user.id, identifier: user.nssNumber, role: user.role, email: user.email || ''};
     return {
       accessToken: this.jwtService.sign(payload),
     };
+  }
+
+  async validateToken(user: any) {
+    // User is already validated by JwtAuthGuard
+    return { success: true, role: user.role, email: user.email };
   }
 
  async initOnboarding(nssNumber: string, email: string, initiatedBy: { id: number; role: string }) {
@@ -94,6 +100,9 @@ export class AuthService {
       throw new HttpException('Unauthorized: Only staff or admins can initiate onboarding', HttpStatus.FORBIDDEN);
     }
 
+     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new HttpException('Invalid email address', HttpStatus.BAD_REQUEST);
+  }
     // Check if NSS number already exists
     const existingUser = await this.usersService.findByNssNumberOrStaffId(nssNumber);
     if (existingUser) {

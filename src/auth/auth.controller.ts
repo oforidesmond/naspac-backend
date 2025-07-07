@@ -1,4 +1,4 @@
-import { Controller, Post, Body, UseGuards, Request } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, Request, Get, Req } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { RateLimitGuard } from './rate-limit.guard';
 import { CaptchaGuard } from './captcha.guard';
@@ -27,6 +27,19 @@ export class AuthController {
   @UseGuards(RateLimitGuard)
   async loginStaffAdmin(@Body() body: LoginStaffAdminDto) {
     return this.authService.loginStaffAdmin(body.staffId, body.password);
+  }
+
+    @Get('validate')
+  @UseGuards(JwtAuthGuard)
+  async validateToken(@Req() req: any) {
+    return { success: true, role: req.user.role, email: req.user.email };
+  }
+
+  @Post('logout')
+  @UseGuards(JwtAuthGuard)
+  async logout() {
+    // Optional: Add server-side token invalidation (e.g., blacklist)
+    return { success: true, message: 'Logged out successfully' };
   }
 
   @Post('init-onboarding')

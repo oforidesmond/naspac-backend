@@ -23,20 +23,39 @@ export class UsersController {
  @Post('submit-onboarding')
   @UseGuards(JwtAuthGuard, RolesGuard, RateLimitGuard)
   @Roles('PERSONNEL')
-  @UseInterceptors(FilesInterceptor('files', 2)) // Handle up to 2 files
+  @UseInterceptors(FilesInterceptor('files', 2, {
+    fileFilter: (req, file, cb) => {
+      if (file.mimetype !== 'application/pdf') {
+        return cb(new Error('Only PDF files are allowed'), false);
+      }
+      cb(null, true);
+    },
+    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+  }))
   async submitOnboarding(
     @Request() req,
     @Body() dto: SubmitOnboardingDto,
-    @UploadedFiles() files: { files?: Express.Multer.File[] },
+    @UploadedFiles() files: Express.Multer.File[],
   ) {
-    const postingLetter = files.files?.find((f) => f.fieldname === 'postingLetter');
-    const appointmentLetter = files.files?.find((f) => f.fieldname === 'appointmentLetter');
-    return this.usersService.submitOnboarding(req.user.id, dto, { postingLetter, appointmentLetter });
+    // Map files to the expected structure
+    const fileMap = {
+      postingLetter: files.find((f) => f.originalname.includes('postingLetter')),
+      appointmentLetter: files.find((f) => f.originalname.includes('appointmentLetter')),
+    };
+    return this.usersService.submitOnboarding(req.user.id, dto, fileMap);
   }
 
   @Get('ghana-universities')
   async getGhanaUniversities() {
     return this.usersService.getGhanaUniversities();
+  }
+
+  //get submissions
+    @Get('submissions')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('STAFF', 'ADMIN')
+  async getSubmissions() {
+    return this.usersService.getAllSubmissions();
   }
 
   //check for submission status

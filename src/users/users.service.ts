@@ -10,8 +10,8 @@ import { firstValueFrom } from 'rxjs';
 @Injectable()
 export class UsersService {
   private supabase = createClient(
-    process.env.SUPABASE_URL,
-    process.env.SUPABASE_KEY,
+    process.env.SUPABASE_URL || 'https://nrhrgsonhgbbcbjfqafs.supabase.co',
+    process.env.SUPABASE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5yaHJnc29uaGdiYmNiamZxYWZzIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1MjE1OTk2OCwiZXhwIjoyMDY3NzM1OTY4fQ.hRrJaNnFA0AKmTZocoXkccYk26-g8vy1YZkNJdZ4jaQ',
   );
 
   constructor(private prisma: PrismaService,
@@ -70,7 +70,7 @@ async createUser(dto: CreateUserDto) {
   return this.prisma.user.findUnique({ where: { email } });
   }
 
-  async submitOnboarding(userId: number, dto: SubmitOnboardingDto, files: { postingLetter?: Express.Multer.File; appointmentLetter?: Express.Multer.File }) {
+ async submitOnboarding(userId: number, dto: SubmitOnboardingDto, files: { postingLetter?: Express.Multer.File; appointmentLetter?: Express.Multer.File }) {
     // Verify user is PERSONNEL and NSS number matches
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user || user.role !== 'PERSONNEL' || user.nssNumber !== dto.nssNumber) {
@@ -85,38 +85,62 @@ async createUser(dto: CreateUserDto) {
       throw new HttpException('Submission already exists for this user', HttpStatus.BAD_REQUEST);
     }
 
+    // Validate files
+    if (files.postingLetter && files.postingLetter.mimetype !== 'application/pdf') {
+      throw new HttpException('Posting letter must be a PDF', HttpStatus.BAD_REQUEST);
+    }
+    if (files.appointmentLetter && files.appointmentLetter.mimetype !== 'application/pdf') {
+      throw new HttpException('Appointment letter must be a PDF', HttpStatus.BAD_REQUEST);
+    }
+
     // Upload files to Supabase Storage
     let postingLetterUrl = '';
     let appointmentLetterUrl = '';
 
     if (files.postingLetter) {
+      const fileKey = `posting-letters/${userId}-${Date.now()}.pdf`;
       const { data, error } = await this.supabase.storage
-        .from('onboarding-documents')
-        .upload(`posting-letters/${userId}-${Date.now()}.pdf`, files.postingLetter.buffer, {
+        .from('killermike')
+        .upload(fileKey, files.postingLetter.buffer, {
           contentType: 'application/pdf',
+          cacheControl: '3600',
         });
       if (error) {
-        throw new HttpException('Failed to upload posting letter', HttpStatus.INTERNAL_SERVER_ERROR);
+        console.error('Failed to upload posting letter:', error);
+        throw new HttpException(`Failed to upload posting letter: ${error.message}`, HttpStatus.INTERNAL_SERVER_ERROR);
       }
-      postingLetterUrl = `${process.env.SUPABASE_URL}/storage/v1/object/public/onboarding-documents/${data.path}`;
+      const { data: urlData } = this.supabase.storage
+        .from('killermike')
+        .getPublicUrl(fileKey);
+
+      if (!urlData || !urlData.publicUrl) {
+        throw new HttpException('Failed to get public URL for posting letter', HttpStatus.INTERNAL_SERVER_ERROR);
+      }
+      postingLetterUrl = urlData.publicUrl;
     }
 
     if (files.appointmentLetter) {
+      const fileKey = `appointment-letters/${userId}-${Date.now()}.pdf`;
       const { data, error } = await this.supabase.storage
-        .from('onboarding-documents')
-        .upload(`appointment-letters/${userId}-${Date.now()}.pdf`, files.appointmentLetter.buffer, {
+        .from('killermike')
+        .upload(fileKey, files.appointmentLetter.buffer, {
           contentType: 'application/pdf',
         });
       if (error) {
-        throw new HttpException('Failed to upload appointment letter', HttpStatus.INTERNAL_SERVER_ERROR);
+        throw new HttpException(`Failed to upload appointment letter: ${error.message}`, HttpStatus.INTERNAL_SERVER_ERROR);
       }
-      appointmentLetterUrl = `${process.env.SUPABASE_URL}/storage/v1/object/public/onboarding-documents/${data.path}`;
+      const { data: urlData } = this.supabase.storage
+        .from('killermike')
+        .getPublicUrl(fileKey);
+      appointmentLetterUrl = urlData.publicUrl;
     }
-     // Convert yearOfNss string to number
-  const yearOfNss = parseInt(dto.yearOfNss, 10);
-  if (isNaN(yearOfNss) || yearOfNss < 1900 || yearOfNss > new Date().getFullYear()) {
-    throw new HttpException('Invalid NSS year', HttpStatus.BAD_REQUEST);
-  }
+
+    // Convert yearOfNss string to number
+    const yearOfNss = parseInt(dto.yearOfNss, 10);
+    if (isNaN(yearOfNss) || yearOfNss < 1900 || yearOfNss > new Date().getFullYear()) {
+      throw new HttpException('Invalid NSS year', HttpStatus.BAD_REQUEST);
+    }
+
     // Create submission
     return this.prisma.submission.create({
       data: {
@@ -159,5 +183,30 @@ async createUser(dto: CreateUserDto) {
       where: { userId },
     });
     return { hasSubmitted: !!submission };
+  }
+
+   async getAllSubmissions() {
+    return this.prisma.submission.findMany({
+      select: {
+        id: true,
+        fullName: true,
+        nssNumber: true,
+        gender: true,
+        email: true,
+        placeOfResidence: true,
+        phoneNumber: true,
+        universityAttended: true,
+        regionOfSchool: true,
+        yearOfNss: true,
+        programStudied: true,
+        divisionPostedTo: true,
+        postingLetterUrl: true,
+        appointmentLetterUrl: true,
+        status: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
   }
 }

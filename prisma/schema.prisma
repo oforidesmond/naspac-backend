@@ -88,6 +88,7 @@ enum Role {
 
 enum SubmissionStatus {
   PENDING
+  PENDING_ENDORSEMENT
   ENDORSED
   REJECTED
   VALIDATED

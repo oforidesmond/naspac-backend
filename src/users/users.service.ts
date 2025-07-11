@@ -4,7 +4,7 @@ import * as bcrypt from 'bcrypt';
 import { PrismaService } from 'prisma/prisma.service';
 import { createClient } from '@supabase/supabase-js';
 import { HttpService } from '@nestjs/axios';
-import { SubmitOnboardingDto } from './dto/submit-onboarding.dto';
+import { SubmitOnboardingDto, UpdateSubmissionStatusDto } from './dto/submit-onboarding.dto';
 import { firstValueFrom } from 'rxjs';
 
 @Injectable()
@@ -209,4 +209,69 @@ async createUser(dto: CreateUserDto) {
       orderBy: { createdAt: 'desc' },
     });
   }
+
+ async updateSubmissionStatus(
+  userId: number,
+  submissionId: number,
+  dto: UpdateSubmissionStatusDto,
+) {
+  // Verify user is ADMIN or STAFF
+  const user = await this.prisma.user.findUnique({ where: { id: userId } });
+  if (!user || !['ADMIN', 'STAFF'].includes(user.role)) {
+    throw new HttpException('Unauthorized: Only ADMIN or STAFF can update submission status', HttpStatus.FORBIDDEN);
+  }
+
+  // Verify submission exists
+  const submission = await this.prisma.submission.findUnique({
+    where: { id: submissionId },
+  });
+  if (!submission) {
+    throw new HttpException('Submission not found', HttpStatus.NOT_FOUND);
+  }
+
+  // Validate status transition (optional: add specific business rules for status changes)
+  const validStatusTransitions = {
+    PENDING: ['PENDING_ENDORSEMENT', 'REJECTED'],
+    PENDING_ENDORSEMENT: ['ENDORSED', 'REJECTED'],
+    ENDORSED: ['VALIDATED', 'REJECTED'],
+    VALIDATED: ['COMPLETED', 'REJECTED'],
+    REJECTED: ['PENDING'], // Allow resubmission
+    COMPLETED: [], // No further transitions
+  };
+
+  if (
+    validStatusTransitions[submission.status] &&
+    !validStatusTransitions[submission.status].includes(dto.status)
+  ) {
+    throw new HttpException(
+      `Invalid status transition from ${submission.status} to ${dto.status}`,
+      HttpStatus.BAD_REQUEST,
+    );
+  }
+
+  // Start a transaction to update submission and create audit log
+  return this.prisma.$transaction(async (prisma) => {
+    // Update submission status
+    const updatedSubmission = await prisma.submission.update({
+      where: { id: submissionId },
+      data: {
+        status: dto.status,
+        updatedAt: new Date(),
+      },
+    });
+
+    // Create audit log entry
+    await prisma.auditLog.create({
+      data: {
+        submissionId,
+        action: `STATUS_CHANGED_TO_${dto.status}`,
+        userId,
+        details: dto.comment || `Submission status changed to ${dto.status}`,
+        createdAt: new Date(),
+      },
+    });
+
+    return updatedSubmission;
+  });
+}
 }

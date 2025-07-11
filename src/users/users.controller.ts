@@ -1,11 +1,11 @@
-import { Controller, Post, Body, UseGuards, UseInterceptors, UploadedFiles, Request, Get } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, UseInterceptors, UploadedFiles, Request, Get, ParseIntPipe, Param } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { Roles } from 'src/common/decorators/roles.decorator';
 import { JwtAuthGuard } from 'src/common/guards/auth-guard';
 import { RolesGuard } from 'src/common/guards/roles-guard';
 import { FilesInterceptor } from '@nestjs/platform-express';
-import { SubmitOnboardingDto } from './dto/submit-onboarding.dto';
+import { SubmitOnboardingDto, UpdateSubmissionStatusDto } from './dto/submit-onboarding.dto';
 import { RateLimitGuard } from 'src/auth/rate-limit.guard';
 
 
@@ -20,6 +20,7 @@ export class UsersController {
     return this.usersService.createUser(createUserDto);
   }
 
+  //submit onboarding
  @Post('submit-onboarding')
   @UseGuards(JwtAuthGuard, RolesGuard, RateLimitGuard)
   @Roles('PERSONNEL')
@@ -45,6 +46,7 @@ export class UsersController {
     return this.usersService.submitOnboarding(req.user.id, dto, fileMap);
   }
 
+  //Get unversities
   @Get('ghana-universities')
   async getGhanaUniversities() {
     return this.usersService.getGhanaUniversities();
@@ -65,4 +67,19 @@ export class UsersController {
   async getOnboardingStatus(@Request() req) {
     return this.usersService.getOnboardingStatus(req.user.id);
   }
+
+  @Post('update-submission-status/:submissionId')
+@UseGuards(JwtAuthGuard, RolesGuard, RateLimitGuard)
+@Roles('ADMIN', 'STAFF') // Only ADMIN and STAFF can change submission status
+async updateSubmissionStatus(
+  @Request() req,
+  @Param('submissionId', ParseIntPipe) submissionId: number,
+  @Body() dto: UpdateSubmissionStatusDto,
+) {
+  return this.usersService.updateSubmissionStatus(
+    req.user.id,
+    submissionId,
+    dto,
+  );
+}
 }

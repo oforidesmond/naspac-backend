@@ -1,3 +1,4 @@
+import { SubmissionStatus } from '@prisma/client';
 import { IsString, IsEnum, IsEmail, IsInt, MinLength, IsOptional, Matches } from 'class-validator';
 
 enum Gender {
@@ -45,4 +46,13 @@ export class SubmitOnboardingDto {
 
   @IsOptional()
   appointmentLetter: any; // File upload (handled by NestJS FileInterceptor)
+}
+
+export class UpdateSubmissionStatusDto {
+  @IsEnum(SubmissionStatus)
+  status: SubmissionStatus;
+
+  @IsOptional()
+  @IsString()
+  comment?: string;
 }

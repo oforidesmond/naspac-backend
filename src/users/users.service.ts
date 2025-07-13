@@ -4,7 +4,7 @@ import * as bcrypt from 'bcrypt';
 import { PrismaService } from 'prisma/prisma.service';
 import { createClient } from '@supabase/supabase-js';
 import { HttpService } from '@nestjs/axios';
-import { SubmitOnboardingDto, UpdateSubmissionStatusDto } from './dto/submit-onboarding.dto';
+import { GetSubmissionStatusCountsDto, SubmitOnboardingDto, UpdateSubmissionStatusDto } from './dto/submit-onboarding.dto';
 import { firstValueFrom } from 'rxjs';
 
 @Injectable()
@@ -186,7 +186,11 @@ async createUser(dto: CreateUserDto) {
   }
 
    async getAllSubmissions() {
+    const currentYear = new Date().getFullYear();
     return this.prisma.submission.findMany({
+        where: {
+      yearOfNss: currentYear,
+    },
       select: {
         id: true,
         fullName: true,
@@ -272,6 +276,60 @@ async createUser(dto: CreateUserDto) {
     });
 
     return updatedSubmission;
+    });
+  }
+
+  async getSubmissionStatusCounts(userId: number, dto: GetSubmissionStatusCountsDto) {
+  // Verify user is ADMIN or STAFF
+  const user = await this.prisma.user.findUnique({ where: { id: userId } });
+  if (!user || !['ADMIN', 'STAFF'].includes(user.role)) {
+    throw new HttpException(
+      'Unauthorized: Only ADMIN or STAFF can access submission status counts',
+      HttpStatus.FORBIDDEN,
+    );
+  }
+
+  // Validate statuses array is not empty
+  if (!dto.statuses || dto.statuses.length === 0) {
+    throw new HttpException(
+      'At least one status must be provided',
+      HttpStatus.BAD_REQUEST,
+    );
+  }
+  const currentYear = new Date().getFullYear();
+  // Fetch counts for each status
+  const counts = await this.prisma.submission.groupBy({
+    by: ['status'],
+    where: {
+      status: {
+        in: dto.statuses,
+      },
+      deletedAt: null, 
+      user: {
+        role: 'PERSONNEL',
+      },
+      yearOfNss: currentYear,
+    },
+    _count: {
+      _all: true,
+    },
   });
-}
+
+    // Get total count of PERSONNEL submissions
+  const totalCount = await this.prisma.submission.count({
+    where: {
+      deletedAt: null,
+      user: {
+        role: 'PERSONNEL',
+      },
+    },
+  });
+
+   const result = dto.statuses.reduce((acc, status) => {
+    const statusCount = counts.find((c) => c.status === status)?._count._all || 0;
+    return { ...acc, [status]: statusCount };
+  }, { total: totalCount });
+
+  return result;
+ }
 }

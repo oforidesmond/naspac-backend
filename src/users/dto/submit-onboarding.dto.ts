@@ -1,5 +1,5 @@
 import { SubmissionStatus } from '@prisma/client';
-import { IsString, IsEnum, IsEmail, IsInt, MinLength, IsOptional, Matches } from 'class-validator';
+import { IsString, IsEnum, IsEmail, IsInt, MinLength, IsOptional, Matches, IsArray } from 'class-validator';
 
 enum Gender {
   MALE = 'MALE',
@@ -55,4 +55,10 @@ export class UpdateSubmissionStatusDto {
   @IsOptional()
   @IsString()
   comment?: string;
+}
+
+export class GetSubmissionStatusCountsDto {
+  @IsArray()
+  @IsEnum(SubmissionStatus, { each: true })
+  statuses: SubmissionStatus[];
 }

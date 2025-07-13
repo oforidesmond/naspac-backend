@@ -5,7 +5,7 @@ import { Roles } from 'src/common/decorators/roles.decorator';
 import { JwtAuthGuard } from 'src/common/guards/auth-guard';
 import { RolesGuard } from 'src/common/guards/roles-guard';
 import { FilesInterceptor } from '@nestjs/platform-express';
-import { SubmitOnboardingDto, UpdateSubmissionStatusDto } from './dto/submit-onboarding.dto';
+import { GetSubmissionStatusCountsDto, SubmitOnboardingDto, UpdateSubmissionStatusDto } from './dto/submit-onboarding.dto';
 import { RateLimitGuard } from 'src/auth/rate-limit.guard';
 import { SupabaseStorageService } from 'src/documents/supabase-storage.service';
 import { PrismaService } from 'prisma/prisma.service';
@@ -142,17 +142,28 @@ export class UsersController {
   }
 
   @Post('update-submission-status/:submissionId')
-@UseGuards(JwtAuthGuard, RolesGuard, RateLimitGuard)
-@Roles('ADMIN', 'STAFF') // Only ADMIN and STAFF can change submission status
-async updateSubmissionStatus(
-  @Request() req,
-  @Param('submissionId', ParseIntPipe) submissionId: number,
-  @Body() dto: UpdateSubmissionStatusDto,
-) {
-  return this.usersService.updateSubmissionStatus(
-    req.user.id,
-    submissionId,
-    dto,
-    );
+    @UseGuards(JwtAuthGuard, RolesGuard, RateLimitGuard)
+    @Roles('ADMIN', 'STAFF') // Only ADMIN and STAFF can change submission status
+    async updateSubmissionStatus(
+      @Request() req,
+      @Param('submissionId', ParseIntPipe) submissionId: number,
+      @Body() dto: UpdateSubmissionStatusDto,
+    ) {
+      return this.usersService.updateSubmissionStatus(
+        req.user.id,
+        submissionId,
+        dto,
+        );
+  }
+
+  //check submission status
+  @Post('submission-status-counts')
+    @UseGuards(JwtAuthGuard, RolesGuard, RateLimitGuard)
+    @Roles('ADMIN', 'STAFF')
+    async getSubmissionStatusCounts(
+      @Request() req,
+      @Body() dto: GetSubmissionStatusCountsDto,
+    ) {
+      return this.usersService.getSubmissionStatusCounts(req.user.id, dto);
   }
 }

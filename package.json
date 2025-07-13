@@ -33,6 +33,7 @@
     "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-express": "^10.0.0",
     "@prisma/client": "^6.1.0",
+    "@signpdf/placeholder-pdf-lib": "^3.2.6",
     "@signpdf/signpdf": "^3.2.5",
     "@supabase/supabase-js": "^2.50.4",
     "@vercel/blob": "^1.1.1",

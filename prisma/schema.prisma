@@ -11,6 +11,12 @@ model User {
   id          Int      @id @default(autoincrement())
   name       String? 
   nssNumber   String?  @unique
+  signage     String?  // Stores path to admin's signature image (e.g., in Supabase)
+  stamp       String?  // Stores path to admin's stamp image (e.g., in Supabase)
+  stampHeight Int?     // Stores stamp height for PDF rendering
+  stampWidth  Int?     // Stores stamp width for PDF rendering
+  sigHeight   Int?     // Stores signature height for PDF rendering
+  sigWidth    Int?     // Stores signature width for PDF rendering
   staffId     String?  @unique
   email       String?  @unique
   password    String?
@@ -19,6 +25,7 @@ model User {
   updatedAt   DateTime @updatedAt
   deletedAt   DateTime?
   submissions Submission[]
+  documents   Document[]   @relation("SignedDocuments")
   passwordResetTokens PasswordResetToken[]
   OnboardingToken  OnboardingToken []
 }
@@ -42,10 +49,23 @@ model Submission {
   appointmentLetterUrl String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-  deletedAt           DateTime?
+  deletedAt   DateTime?
   user        User     @relation(fields: [userId], references: [id])
+  documents   Document[]
   auditLogs   AuditLog[]
   @@unique([userId, nssNumber])
+}
+
+model Document {
+  id          Int      @id @default(autoincrement())
+  submissionId Int
+  adminId     Int
+  originalUrl String   // URL of the original PDF
+  signedUrl   String   // URL of the signed PDF
+  documentHash String  // SHA-256 hash of the signed PDF
+  signedAt    DateTime @default(now())
+  submission  Submission @relation(fields: [submissionId], references: [id])
+  admin       User      @relation("SignedDocuments", fields: [adminId], references: [id])
 }
 
 model AuditLog {

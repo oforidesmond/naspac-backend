@@ -1,0 +1,116 @@
+import { Controller, Post, Body, UseGuards, HttpException, HttpStatus, Request, Get } from '@nestjs/common';
+import { PrismaService } from 'prisma/prisma.service';
+import { JwtAuthGuard } from 'src/common/guards/auth-guard';
+import { RolesGuard } from 'src/common/guards/roles-guard';
+import { Roles } from 'src/common/decorators/roles.decorator';
+import { DocumentsService } from './documents.service';
+
+@Controller('documents')
+export class DocumentsController {
+  constructor(
+    private documentsService: DocumentsService,
+    private prisma: PrismaService,
+  ) {}
+
+  @Post('sign')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  async signDocument(
+    @Body() body: { submissionId: number; documentType: 'postingLetter' | 'appointmentLetter' },
+    @Request() req,
+  ) {
+    const { submissionId, documentType } = body;
+
+    // Validate submission
+    const submission = await this.prisma.submission.findUnique({
+      where: { id: submissionId },
+      include: { user: true },
+    });
+    if (!submission) {
+      throw new HttpException('Submission not found', HttpStatus.NOT_FOUND);
+    }
+    if (submission.status !== 'PENDING_ENDORSEMENT') {
+      throw new HttpException('Submission not ready for endorsement', HttpStatus.BAD_REQUEST);
+    }
+
+    // Get admin's signature/stamp paths
+    const admin = await this.prisma.user.findUnique({
+      where: { id: req.user.id },
+    });
+    if (!admin || !admin.signage || !admin.stamp) {
+      throw new HttpException(
+        'Admin signature or stamp not configured',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    // Determine which document to sign
+    const fileName =
+      documentType === 'postingLetter'
+         ? submission.postingLetterUrl.replace(
+      `${process.env.SUPABASE_URL}/storage/v1/object/public/killermike/`,
+      '',
+    )
+  : submission.appointmentLetterUrl.replace(
+      `${process.env.SUPABASE_URL}/storage/v1/object/public/killermike/`,
+      '',
+    );
+console.log('Raw URL:', submission.appointmentLetterUrl, 'Parsed fileName:', fileName);
+
+    if (!fileName) {
+      throw new HttpException(`No ${documentType} found for submission`, HttpStatus.BAD_REQUEST);
+    }
+
+    // Sign the document
+    const { signedUrl, documentId } = await this.documentsService.signDocument(
+      submissionId,
+      fileName,
+      req.user.id,
+      admin.signage,
+      admin.stamp,
+    );
+
+    return {
+      message: `${documentType} signed successfully`,
+      signedUrl,
+      documentId,
+    };
+  }
+
+  // Retrieve signed document
+  @Get('signed/:submissionId')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('PERSONNEL', 'ADMIN')
+  async getSignedDocument(@Request() req, @Body() body: { submissionId: number }) {
+    const { submissionId } = body;
+
+    // Validate submission
+    const submission = await this.prisma.submission.findUnique({
+      where: { id: submissionId },
+      include: { user: true },
+    });
+    if (!submission) {
+      throw new HttpException('Submission not found', HttpStatus.NOT_FOUND);
+    }
+
+    // Ensure user is the submission owner or an admin
+    if (req.user.role !== 'ADMIN' && submission.userId !== req.user.id) {
+      throw new HttpException('Unauthorized access to submission', HttpStatus.FORBIDDEN);
+    }
+
+    // Find signed document
+    const document = await this.prisma.document.findFirst({
+      where: { submissionId },
+      orderBy: { signedAt: 'desc' }, // Get the most recent signed document
+    });
+    if (!document || !document.signedUrl) {
+      throw new HttpException('No signed document found for this submission', HttpStatus.NOT_FOUND);
+    }
+
+    return {
+      message: 'Signed document retrieved successfully',
+      signedUrl: document.signedUrl,
+      documentId: document.id,
+    };
+  }
+}

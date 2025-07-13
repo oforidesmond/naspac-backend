@@ -1,4 +1,4 @@
-import { Controller, Post, Body, UseGuards, UseInterceptors, UploadedFiles, Request, Get, ParseIntPipe, Param } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, UseInterceptors, UploadedFiles, Request, Get, ParseIntPipe, Param, HttpException, HttpStatus } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { Roles } from 'src/common/decorators/roles.decorator';
@@ -7,17 +7,90 @@ import { RolesGuard } from 'src/common/guards/roles-guard';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { SubmitOnboardingDto, UpdateSubmissionStatusDto } from './dto/submit-onboarding.dto';
 import { RateLimitGuard } from 'src/auth/rate-limit.guard';
+import { SupabaseStorageService } from 'src/documents/supabase-storage.service';
+import { PrismaService } from 'prisma/prisma.service';
 
 
 @Controller('users')
 export class UsersController {
-  constructor(private usersService: UsersService) {}
+  constructor(
+    private supabaseStorageService: SupabaseStorageService,
+    private prisma: PrismaService,
+    private usersService: UsersService,
+  ) {}
 
   @Post()
   @Roles('ADMIN')
   @UseGuards(JwtAuthGuard, RolesGuard)
   async createUser(@Body() createUserDto: CreateUserDto) {
     return this.usersService.createUser(createUserDto);
+  }
+
+  //upload signature and stamp
+  @Post('upload-signage')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @UseInterceptors(
+    FilesInterceptor('files', 2, {
+      fileFilter: (req, file, cb) => {
+        if (!['image/png', 'image/jpeg'].includes(file.mimetype)) {
+          return cb(new Error('Only PNG or JPEG files are allowed'), false);
+        }
+        cb(null, true);
+      },
+      limits: { fileSize: 2 * 1024 * 1024 }, // 2MB limit
+    }),
+  )
+  async uploadSignage(
+    @Request() req,
+    @UploadedFiles() files: Array<Express.Multer.File>,
+  ) {
+    const adminId = req.user.id;
+
+    // Validate files
+    const signatureFile = files.find((f) => f.originalname.includes('signature'));
+    const stampFile = files.find((f) => f.originalname.includes('stamp'));
+    if (!signatureFile || !stampFile) {
+      throw new HttpException(
+        'Both signature and stamp files are required',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    // Upload signature to Supabase
+    const signatureFileName = `signatures/admin-${adminId}-signature-${Date.now()}.png`;
+    const signatureUrl = await this.supabaseStorageService.uploadFile(
+      signatureFile.buffer,
+      signatureFileName,
+      'killermike',
+    );
+
+    // Upload stamp to Supabase
+    const stampFileName = `stamps/admin-${adminId}-stamp-${Date.now()}.png`;
+    const stampUrl = await this.supabaseStorageService.uploadFile(
+      stampFile.buffer,
+      stampFileName,
+      'killermike',
+    );
+
+    // Update admin's User record with file paths and default dimensions
+    await this.prisma.user.update({
+      where: { id: adminId },
+      data: {
+        signage: signatureFileName,
+        stamp: stampFileName,
+        sigWidth: 100, // Adjust based on your requirements
+        sigHeight: 50,
+        stampWidth: 100,
+        stampHeight: 50,
+      },
+    });
+
+    return {
+      message: 'Signature and stamp uploaded successfully',
+      signatureUrl,
+      stampUrl,
+    };
   }
 
   //submit onboarding
@@ -80,6 +153,6 @@ async updateSubmissionStatus(
     req.user.id,
     submissionId,
     dto,
-  );
-}
+    );
+  }
 }

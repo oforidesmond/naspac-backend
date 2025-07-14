@@ -24,7 +24,7 @@ export class AuthService {
     }
 
     // Restrict to STAFF or ADMIN roles
-    if (user.role !== 'STAFF' && user.role !== 'ADMIN') {
+    if (user.role !== 'STAFF' && user.role !== 'ADMIN' && user.role !== 'SUPERVISOR') {
       throw new HttpException(
         'Access denied. Only Staff or Admin roles are allowed.',
         HttpStatus.FORBIDDEN,
@@ -216,5 +216,58 @@ export class AuthService {
     await this.prisma.passwordResetToken.delete({ where: { token } });
 
     return { message: 'Password reset successfully' };
+  }
+
+  async initUser(staffId: string, email: string, name: string, role: 'STAFF' | 'ADMIN' | 'SUPERVISOR', initiatedBy: { id: number; role: string }) {
+  // Restrict to ADMIN role
+  if (initiatedBy.role !== 'ADMIN') {
+    throw new HttpException('Unauthorized: Only admins can initiate user creation', HttpStatus.FORBIDDEN);
+  }
+
+  // Validate email
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new HttpException('Invalid email address', HttpStatus.BAD_REQUEST);
+  }
+
+  // Check if staffId or email already exists
+  const existingUser = await this.usersService.findByNssNumberOrStaffId(staffId);
+  if (existingUser) {
+    throw new HttpException('Staff ID already registered', HttpStatus.BAD_REQUEST);
+  }
+  const existingEmail = await this.usersService.findByEmail(email);
+  if (existingEmail) {
+    throw new HttpException('Email already registered', HttpStatus.BAD_REQUEST);
+  }
+
+  // Validate role
+  if (!['STAFF', 'ADMIN', 'SUPERVISOR'].includes(role)) {
+    throw new HttpException('Invalid role: Must be STAFF, ADMIN, or SUPERVISOR', HttpStatus.BAD_REQUEST);
+  }
+
+  // Create new user without password
+  const user = await this.usersService.createUser({
+   staffId,
+    email,
+    name,
+    role,
+  });
+
+  // Generate onboarding token
+  const token = crypto.randomBytes(32).toString('hex');
+  const expiresAt = new Date(Date.now() + 1 * 60 * 60 * 1000); // 1 hour expiry
+
+  await this.prisma.onboardingToken.create({
+    data: {
+      token,
+      nssNumber: staffId, // Using staffId as identifier in token for non-PERSONNEL
+      userId: user.id,
+      expiresAt,
+    },
+  });
+
+  // Queue onboarding email
+  await this.notificationsService.sendOnboardingEmail(email, staffId, token);
+
+  return { message: 'Onboarding link sent to email', email };
   }
 }

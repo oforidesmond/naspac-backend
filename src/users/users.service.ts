@@ -25,6 +25,7 @@ async createUser(dto: CreateUserDto) {
       nssNumber: dto.nssNumber ?? null,
       staffId: dto.staffId ?? null,
       email: dto.email,
+      name: dto.name ?? null,
       password: hashedPassword,
       role: dto.role,
     },

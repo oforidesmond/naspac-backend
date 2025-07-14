@@ -12,6 +12,7 @@ import { LoginPersonnelDto } from './dto/login-personnel.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { RequestForgotPasswordDto } from './dto/request-forgot-password.dto';
 import { OnboardingResetPasswordDto } from './dto/onboarding-reset-password.dto';
+import { InitUserDto } from 'src/users/dto/create-user.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -47,6 +48,13 @@ export class AuthController {
   @Roles('STAFF', 'ADMIN')
   async initOnboarding(@Body() body: InitOnboardingDto, @Request() req) {
     return this.authService.initOnboarding(body.nssNumber, body.email, req.user);
+  }
+  
+    @Post('init-user')
+  @UseGuards(JwtAuthGuard, RolesGuard, RateLimitGuard)
+  @Roles('ADMIN')
+  async initUser(@Body() body: InitUserDto, @Request() req) {
+    return this.authService.initUser(body.staffId, body.email, body.name, body.role, req.user);
   }
 
    @Post('request-forgot-password')

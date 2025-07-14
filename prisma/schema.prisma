@@ -8,102 +8,131 @@ datasource db {
 }
 
 model User {
-  id          Int      @id @default(autoincrement())
-  name       String? 
-  nssNumber   String?  @unique
-  signage     String?  // Stores path to admin's signature image (e.g., in Supabase)
-  stamp       String?  // Stores path to admin's stamp image (e.g., in Supabase)
-  stampHeight Int?     // Stores stamp height for PDF rendering
-  stampWidth  Int?     // Stores stamp width for PDF rendering
-  sigHeight   Int?     // Stores signature height for PDF rendering
-  sigWidth    Int?     // Stores signature width for PDF rendering
-  staffId     String?  @unique
-  email       String?  @unique
-  password    String?
-  role        Role     @default(PERSONNEL)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  deletedAt   DateTime?
-  submissions Submission[]
-  documents   Document[]   @relation("SignedDocuments")
+  id                  Int           @id @default(autoincrement())
+  name                String? 
+  nssNumber           String?       @unique
+  signage             String?       // Stores path to admin's signature image
+  stamp               String?       // Stores path to admin's stamp image
+  stampHeight         Int?    
+  stampWidth          Int?   
+  sigHeight           Int?    
+  sigWidth            Int?   
+  staffId             String?       @unique
+  email               String?       @unique
+  password            String?
+  role                Role          @default(PERSONNEL)
+  departmentId        Int?          // Optional: User can be assigned to a department
+  unitId             Int?          // Optional: User can be assigned to a unit
+  supervisorId        Int?          // Optional: Personnel can have a supervisor
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  deletedAt           DateTime?
+  submissions         Submission[]
+  documents           Document[]    @relation("SignedDocuments")
   passwordResetTokens PasswordResetToken[]
-  OnboardingToken  OnboardingToken []
+  OnboardingToken     OnboardingToken[]
+  department          Department?   @relation("UserDepartment", fields: [departmentId], references: [id])
+  unit                Unit?         @relation("UserUnit", fields: [unitId], references: [id])
+  supervisor          User?         @relation("SupervisorPersonnel", fields: [supervisorId], references: [id])
+  supervisedPersonnel User[]        @relation("SupervisorPersonnel")
 }
 
 model Submission {
-  id          Int      @id @default(autoincrement())
-  userId      Int      @unique
-  fullName    String
-  nssNumber   String
-  gender      Gender
-  email       String
-  placeOfResidence  String
-  phoneNumber      String
-  universityAttended   String
-  regionOfSchool    String
-  yearOfNss         Int
-  programStudied    String
-  divisionPostedTo  String
-  status      SubmissionStatus @default(PENDING)
-  postingLetterUrl String
+  id                  Int           @id @default(autoincrement())
+  userId              Int           @unique
+  fullName            String
+  nssNumber           String
+  gender              Gender
+  email               String
+  placeOfResidence    String
+  phoneNumber         String
+  universityAttended  String
+  regionOfSchool      String
+  yearOfNss           Int
+  programStudied      String
+  divisionPostedTo    String
+  status              SubmissionStatus @default(PENDING)
+  postingLetterUrl    String
   appointmentLetterUrl String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  deletedAt   DateTime?
-  user        User     @relation(fields: [userId], references: [id])
-  documents   Document[]
-  auditLogs   AuditLog[]
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  deletedAt           DateTime?
+  user                User          @relation(fields: [userId], references: [id])
+  documents           Document[]
+  auditLogs           AuditLog[]
   @@unique([userId, nssNumber])
 }
 
+model Department {
+  id                  Int           @id @default(autoincrement())
+  name                String        @unique
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  deletedAt           DateTime?
+  users               User[]        @relation("UserDepartment")
+  units               Unit[]        @relation("DepartmentUnits")
+}
+
+model Unit {
+  id                  Int           @id @default(autoincrement())
+  name                String        @unique
+  departmentId        Int?          // Optional: Unit can exist without a department
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  deletedAt           DateTime?
+  department          Department?   @relation("DepartmentUnits", fields: [departmentId], references: [id])
+  users               User[]        @relation("UserUnit")
+}
+
 model Document {
-  id          Int      @id @default(autoincrement())
-  submissionId Int
-  adminId     Int
-  originalUrl String   // URL of the original PDF
-  signedUrl   String   // URL of the signed PDF
-  documentHash String  // SHA-256 hash of the signed PDF
-  signedAt    DateTime @default(now())
-  submission  Submission @relation(fields: [submissionId], references: [id])
-  admin       User      @relation("SignedDocuments", fields: [adminId], references: [id])
+  id                  Int           @id @default(autoincrement())
+  submissionId        Int
+  adminId             Int
+  originalUrl         String        // URL of the original PDF
+  signedUrl           String        // URL of the signed PDF
+  documentHash        String        // SHA-256 hash of the signed PDF
+  signedAt            DateTime      @default(now())
+  submission          Submission    @relation(fields: [submissionId], references: [id])
+  admin               User          @relation("SignedDocuments", fields: [adminId], references: [id])
 }
 
 model AuditLog {
-  id          Int      @id @default(autoincrement())
-  submissionId Int
-  action      String
-  userId      Int?
-  details     String?
-  createdAt   DateTime @default(now())
-  submission  Submission @relation(fields: [submissionId], references: [id])
+  id                  Int           @id @default(autoincrement())
+  submissionId        Int
+  action              String
+  userId              Int?
+  details             String?
+  createdAt           DateTime      @default(now())
+  submission          Submission    @relation(fields: [submissionId], references: [id])
 }
 
 model PasswordResetToken {
-  id        Int      @id @default(autoincrement())
-  token     String   @unique
-  userId    Int
-  expiresAt DateTime
-  createdAt DateTime @default(now())
-  deletedAt DateTime?
-  user      User     @relation(fields: [userId], references: [id])
+  id                  Int           @id @default(autoincrement())
+  token               String        @unique
+  userId              Int
+  expiresAt           DateTime
+  createdAt           DateTime      @default(now())
+  deletedAt           DateTime?
+  user                User          @relation(fields: [userId], references: [id])
 }
 
 model OnboardingToken {
-  id        Int      @id @default(autoincrement())
-  token     String   @unique
-  nssNumber String   @unique
-  userId    Int
-  expiresAt DateTime
-  used      Boolean  @default(false)
-  createdAt DateTime @default(now())
-  deletedAt DateTime?
-  user      User     @relation(fields: [userId], references: [id])
+  id                  Int           @id @default(autoincrement())
+  token               String        @unique
+  nssNumber           String        @unique
+  userId              Int
+  expiresAt           DateTime
+  used                Boolean       @default(false)
+  createdAt           DateTime      @default(now())
+  deletedAt           DateTime?
+  user                User          @relation(fields: [userId], references: [id])
 }
 
 enum Role {
   PERSONNEL
   STAFF
   ADMIN
+  SUPERVISOR
 }
 
 enum SubmissionStatus {

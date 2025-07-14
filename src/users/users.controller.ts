@@ -9,8 +9,6 @@ import { GetSubmissionStatusCountsDto, SubmitOnboardingDto, UpdateSubmissionStat
 import { RateLimitGuard } from 'src/auth/rate-limit.guard';
 import { SupabaseStorageService } from 'src/documents/supabase-storage.service';
 import { PrismaService } from 'prisma/prisma.service';
-
-
 @Controller('users')
 export class UsersController {
   constructor(
@@ -158,7 +156,7 @@ export class UsersController {
 
   //check submission status
   @Post('submission-status-counts')
-    @UseGuards(JwtAuthGuard, RolesGuard, RateLimitGuard)
+    @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles('ADMIN', 'STAFF')
     async getSubmissionStatusCounts(
       @Request() req,

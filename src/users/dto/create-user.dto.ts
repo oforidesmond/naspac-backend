@@ -1,5 +1,5 @@
-import { IsString, IsEmail, IsEnum, IsOptional } from 'class-validator';
-import { Role } from '@prisma/client';
+import { IsString, IsEmail, IsEnum, IsOptional, IsInt, IsArray } from 'class-validator';
+import { Role, SubmissionStatus } from '@prisma/client';
 
 export class CreateUserDto {
    @IsString()
@@ -38,4 +38,24 @@ export class InitUserDto {
 
   @IsEnum(Role, { message: 'Role must be STAFF, ADMIN, or SUPERVISOR' })
   role: 'STAFF' | 'ADMIN' | 'SUPERVISOR';
+}
+
+export class CreateDepartmentDto {
+  @IsString()
+  name: string;
+
+  @IsInt()
+  supervisorId: number;
+
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  unitIds?: number[];
+}
+
+export class GetPersonnelDto {
+  @IsOptional()
+  @IsArray()
+  @IsEnum(SubmissionStatus, { each: true })
+  statuses?: SubmissionStatus[];
 }

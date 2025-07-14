@@ -1,6 +1,6 @@
 import { Controller, Post, Body, UseGuards, UseInterceptors, UploadedFiles, Request, Get, ParseIntPipe, Param, HttpException, HttpStatus } from '@nestjs/common';
 import { UsersService } from './users.service';
-import { CreateUserDto } from './dto/create-user.dto';
+import { CreateDepartmentDto, CreateUserDto, GetPersonnelDto } from './dto/create-user.dto';
 import { Roles } from 'src/common/decorators/roles.decorator';
 import { JwtAuthGuard } from 'src/common/guards/auth-guard';
 import { RolesGuard } from 'src/common/guards/roles-guard';
@@ -141,7 +141,7 @@ export class UsersController {
 
   @Post('update-submission-status/:submissionId')
     @UseGuards(JwtAuthGuard, RolesGuard, RateLimitGuard)
-    @Roles('ADMIN', 'STAFF') // Only ADMIN and STAFF can change submission status
+    @Roles('ADMIN', 'STAFF')
     async updateSubmissionStatus(
       @Request() req,
       @Param('submissionId', ParseIntPipe) submissionId: number,
@@ -164,4 +164,35 @@ export class UsersController {
     ) {
       return this.usersService.getSubmissionStatusCounts(req.user.id, dto);
   }
+
+  @Get('staff')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  async getStaff(@Request() req) {
+    return this.usersService.getStaff(req.user.id);
+  }
+
+  @Post('create-department')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN', 'STAFF')
+  async createDepartment(@Request() req, @Body() dto: CreateDepartmentDto) {
+    return this.usersService.createDepartment(req.user.id, dto);
+  }
+
+  @Get('departments')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN', 'STAFF')
+  async getDepartments(@Request() req) {
+    return this.usersService.getDepartments(req.user.id);
+  }
+
+  @Post('personnel')
+  @UseGuards(JwtAuthGuard, RolesGuard, RateLimitGuard)
+  @Roles('ADMIN', 'STAFF')
+  async getPersonnel(
+    @Request() req,
+    @Body() dto: GetPersonnelDto,
+  ) {
+    return this.usersService.getPersonnel(req.user.id, dto);
+    }
 }

@@ -1,5 +1,5 @@
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
-import { CreateUserDto } from './dto/create-user.dto';
+import { CreateDepartmentDto, CreateUserDto, GetPersonnelDto } from './dto/create-user.dto';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from 'prisma/prisma.service';
 import { createClient } from '@supabase/supabase-js';
@@ -142,8 +142,20 @@ async createUser(dto: CreateUserDto) {
       throw new HttpException('Invalid NSS year', HttpStatus.BAD_REQUEST);
     }
 
+     // Update User and create Submission in a transaction
+  return this.prisma.$transaction(async (prisma) => {
+    // Update User with fullName and email from submission
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        name: dto.fullName,
+        email: dto.email,
+        updatedAt: new Date(),
+      },
+    });
+
     // Create submission
-    return this.prisma.submission.create({
+    const submission = await prisma.submission.create({
       data: {
         userId,
         fullName: dto.fullName,
@@ -161,6 +173,9 @@ async createUser(dto: CreateUserDto) {
         appointmentLetterUrl,
         status: 'PENDING',
       },
+    });
+
+    return submission;
     });
   }
 
@@ -333,4 +348,201 @@ async createUser(dto: CreateUserDto) {
 
   return result;
  }
+
+ async getStaff(requesterId: number) {
+  // Verify requester is ADMIN or STAFF
+  const requester = await this.prisma.user.findUnique({ where: { id: requesterId } });
+  if (!requester || !['ADMIN', 'STAFF'].includes(requester.role)) {
+    throw new HttpException(
+      'Unauthorized: Only admins or staff can access staff, admin, and supervisor data',
+      HttpStatus.FORBIDDEN,
+    );
+  }
+
+  // Fetch users with STAFF, ADMIN, or SUPERVISOR roles
+  return this.prisma.user.findMany({
+    where: {
+      role: {
+        in: ['STAFF', 'ADMIN', 'SUPERVISOR'], // Filter by specified roles
+      },
+      deletedAt: null, // Exclude soft-deleted users
+    },
+    select: {
+      id: true,
+      name: true,
+      staffId: true,
+      email: true,
+      role: true,
+      department: { select: { id: true, name: true } },
+      unit: { select: { id: true, name: true } },
+      createdAt: true,
+      updatedAt: true,
+    },
+    orderBy: { createdAt: 'desc' }, // Sort by most recent
+  });
+ }
+
+ async createDepartment(requesterId: number, dto: CreateDepartmentDto) {
+  // Verify requester is ADMIN
+  const requester = await this.prisma.user.findUnique({ where: { id: requesterId } });
+  if (!requester || !['ADMIN', 'STAFF'].includes(requester.role)) {
+    throw new HttpException('Unauthorized: Only admins and staff can create departments', HttpStatus.FORBIDDEN);
+  }
+
+  // Validate supervisor
+  const supervisor = await this.prisma.user.findUnique({ where: { id: dto.supervisorId } });
+  if (!supervisor || supervisor.role !== 'SUPERVISOR' || supervisor.deletedAt) {
+    throw new HttpException('Invalid or deleted supervisor', HttpStatus.BAD_REQUEST);
+  }
+
+  // Validate department name uniqueness
+  const existingDepartment = await this.prisma.department.findUnique({ where: { name: dto.name } });
+  if (existingDepartment) {
+    throw new HttpException('Department name already exists', HttpStatus.BAD_REQUEST);
+  }
+
+  // Validate unitIds if provided
+  if (dto.unitIds && dto.unitIds.length > 0) {
+    const units = await this.prisma.unit.findMany({
+      where: { id: { in: dto.unitIds }, deletedAt: null },
+    });
+    if (units.length !== dto.unitIds.length) {
+      throw new HttpException('One or more units are invalid or deleted', HttpStatus.BAD_REQUEST);
+    }
+  }
+
+  // Create department and assign units in a transaction
+  return this.prisma.$transaction(async (prisma) => {
+    const department = await prisma.department.create({
+      data: {
+        name: dto.name,
+        supervisorId: dto.supervisorId,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      select: {
+        id: true,
+        name: true,
+        supervisorId: true,
+        supervisor: { select: { id: true, name: true, email: true } },
+        units: { select: { id: true, name: true } },
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    // Assign units to department if provided
+    if (dto.unitIds && dto.unitIds.length > 0) {
+      await prisma.unit.updateMany({
+        where: { id: { in: dto.unitIds } },
+        data: { departmentId: department.id, updatedAt: new Date() },
+      });
+      // Update department to include units in response
+      department.units = await prisma.unit.findMany({
+        where: { id: { in: dto.unitIds } },
+        select: { id: true, name: true },
+      });
+    }
+
+    return department;
+  });
+ }
+
+ async getDepartments(requesterId: number) {
+  const requester = await this.prisma.user.findUnique({ where: { id: requesterId } });
+  if (!requester || !['ADMIN', 'STAFF'].includes(requester.role)) {
+    throw new HttpException('Unauthorized: Only admins or staff can access departments', HttpStatus.FORBIDDEN);
+  }
+
+  // Get current year for filtering
+  // const currentYear = new Date().getFullYear();
+
+  // Fetch departments
+  return this.prisma.department.findMany({
+    where: {
+      deletedAt: null, // Exclude soft-deleted departments
+      // createdAt: {
+      //   gte: new Date(currentYear, 0, 1), // Start of current year
+      //   lte: new Date(currentYear, 11, 31, 23, 59, 59), // End of current year
+      // },
+    },
+    select: {
+      id: true,
+      name: true,
+      supervisorId: true,
+      supervisor: { select: { id: true, name: true, email: true } },
+      units: { select: { id: true, name: true }, where: { deletedAt: null } },
+      createdAt: true,
+      updatedAt: true,
+    },
+    orderBy: { createdAt: 'desc' }, // Sort by most recent
+    });
+  }
+
+  async getPersonnel(requesterId: number, dto: GetPersonnelDto) {
+  const requester = await this.prisma.user.findUnique({ where: { id: requesterId } });
+  if (!requester || !['ADMIN', 'STAFF'].includes(requester.role)) {
+    throw new HttpException(
+      'Unauthorized: Only admins or staff can access personnel data',
+      HttpStatus.FORBIDDEN,
+    );
+  }
+  const currentYear = new Date().getFullYear();
+
+  // Fetch personnel with optional submission status filter
+  return this.prisma.user.findMany({
+    where: {
+      role: 'PERSONNEL',
+      deletedAt: null,
+      submissions: {
+        some: {
+          yearOfNss: currentYear,
+          deletedAt: null,
+          ...(dto.statuses && dto.statuses.length > 0
+            ? { status: { in: dto.statuses } } // Filter by statuses if provided
+            : {}),
+        },
+      },
+    },
+    select: {
+      id: true,
+      name: true,
+      nssNumber: true,
+      email: true,
+      role: true,
+      department: { select: { id: true, name: true } },
+      unit: { select: { id: true, name: true } },
+      supervisor: { select: { id: true, name: true, email: true } },
+      submissions: {
+        select: {
+          id: true,
+          fullName: true,
+          nssNumber: true,
+          email: true,
+          gender: true,
+          placeOfResidence: true,
+          phoneNumber: true,
+          universityAttended: true,
+          regionOfSchool: true,
+          yearOfNss: true,
+          programStudied: true,
+          divisionPostedTo: true,
+          status: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+        where: {
+          yearOfNss: currentYear,
+          deletedAt: null,
+          ...(dto.statuses && dto.statuses.length > 0
+            ? { status: { in: dto.statuses } }
+            : {}),
+        },
+      },
+      createdAt: true,
+      updatedAt: true,
+    },
+    orderBy: { createdAt: 'desc' },
+   });
+  }
 }

@@ -4,6 +4,7 @@ import { IsString, IsEnum, IsEmail, IsInt, MinLength, IsOptional, Matches, IsArr
 enum Gender {
   MALE = 'MALE',
   FEMALE = 'FEMALE',
+  OTHER = 'OTHER',
 }
 
 export class SubmitOnboardingDto {

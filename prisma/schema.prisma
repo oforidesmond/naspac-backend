@@ -35,6 +35,7 @@ model User {
   unit                Unit?         @relation("UserUnit", fields: [unitId], references: [id])
   supervisor          User?         @relation("SupervisorPersonnel", fields: [supervisorId], references: [id])
   supervisedPersonnel User[]        @relation("SupervisorPersonnel")
+  departmentsSupervised Department[] @relation("DepartmentSupervisor")
 }
 
 model Submission {
@@ -66,11 +67,13 @@ model Submission {
 model Department {
   id                  Int           @id @default(autoincrement())
   name                String        @unique
+  supervisorId        Int 
   createdAt           DateTime      @default(now())
   updatedAt           DateTime      @updatedAt
   deletedAt           DateTime?
   users               User[]        @relation("UserDepartment")
   units               Unit[]        @relation("DepartmentUnits")
+  supervisor          User          @relation("DepartmentSupervisor", fields: [supervisorId], references: [id])
 }
 
 model Unit {
@@ -147,4 +150,5 @@ enum SubmissionStatus {
 enum Gender {
   MALE
   FEMALE
+  OTHER
 }

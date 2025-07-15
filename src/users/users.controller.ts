@@ -1,6 +1,6 @@
 import { Controller, Post, Body, UseGuards, UseInterceptors, UploadedFiles, Request, Get, ParseIntPipe, Param, HttpException, HttpStatus } from '@nestjs/common';
 import { UsersService } from './users.service';
-import { CreateDepartmentDto, CreateUserDto, GetPersonnelDto } from './dto/create-user.dto';
+import { AssignPersonnelToDepartmentDto, CreateDepartmentDto, CreateUserDto, GetPersonnelDto } from './dto/create-user.dto';
 import { Roles } from 'src/common/decorators/roles.decorator';
 import { JwtAuthGuard } from 'src/common/guards/auth-guard';
 import { RolesGuard } from 'src/common/guards/roles-guard';
@@ -194,5 +194,15 @@ export class UsersController {
     @Body() dto: GetPersonnelDto,
   ) {
     return this.usersService.getPersonnel(req.user.id, dto);
-    }
+  }
+
+  @Post('assign-personnel-to-department')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('ADMIN', 'STAFF')
+async assignPersonnelToDepartment(
+  @Request() req,
+  @Body() dto: AssignPersonnelToDepartmentDto,
+) {
+  return this.usersService.assignPersonnelToDepartment(req.user.id, dto);
+  }
 }

@@ -1,5 +1,5 @@
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
-import { CreateDepartmentDto, CreateUserDto, GetPersonnelDto } from './dto/create-user.dto';
+import { AssignPersonnelToDepartmentDto, CreateDepartmentDto, CreateUserDto, GetPersonnelDto } from './dto/create-user.dto';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from 'prisma/prisma.service';
 import { createClient } from '@supabase/supabase-js';
@@ -313,23 +313,33 @@ async createUser(dto: CreateUserDto) {
     );
   }
   const currentYear = new Date().getFullYear();
-  // Fetch counts for each status
-  const counts = await this.prisma.submission.groupBy({
-    by: ['status'],
-    where: {
-      status: {
-        in: dto.statuses,
-      },
-      deletedAt: null, 
-      user: {
-        role: 'PERSONNEL',
-      },
-      yearOfNss: currentYear,
-    },
-    _count: {
-      _all: true,
-    },
-  });
+  
+  // Fetch counts of submissions that have ever been in each status
+  const counts = await Promise.all(
+    dto.statuses.map(async (status) => {
+      const submissionIds = await this.prisma.auditLog.findMany({
+        where: {
+          action: `STATUS_CHANGED_TO_${status}`,
+          submission: {
+            deletedAt: null,
+            user: {
+              role: 'PERSONNEL',
+            },
+            yearOfNss: currentYear,
+          },
+        },
+        select: {
+          submissionId: true,
+        },
+        distinct: ['submissionId'], // Ensure unique submission IDs
+      });
+
+      return {
+        status,
+        count: submissionIds.length,
+      };
+    })
+  );
 
     // Get total count of PERSONNEL submissions
   const totalCount = await this.prisma.submission.count({
@@ -338,13 +348,14 @@ async createUser(dto: CreateUserDto) {
       user: {
         role: 'PERSONNEL',
       },
+      yearOfNss: currentYear,
     },
   });
 
-   const result = dto.statuses.reduce((acc, status) => {
-    const statusCount = counts.find((c) => c.status === status)?._count._all || 0;
-    return { ...acc, [status]: statusCount };
-  }, { total: totalCount });
+  const result = counts.reduce(
+    (acc, { status, count }) => ({ ...acc, [status]: count }),
+    { total: totalCount }
+  );
 
   return result;
  }
@@ -373,6 +384,12 @@ async createUser(dto: CreateUserDto) {
       staffId: true,
       email: true,
       role: true,
+      departmentsSupervised: {
+      select: {
+        id: true,
+        name: true,
+        },
+      },
       department: { select: { id: true, name: true } },
       unit: { select: { id: true, name: true } },
       createdAt: true,
@@ -475,7 +492,7 @@ async createUser(dto: CreateUserDto) {
       createdAt: true,
       updatedAt: true,
     },
-    orderBy: { createdAt: 'desc' }, // Sort by most recent
+    orderBy: { createdAt: 'desc' },
     });
   }
 
@@ -499,20 +516,31 @@ async createUser(dto: CreateUserDto) {
           yearOfNss: currentYear,
           deletedAt: null,
           ...(dto.statuses && dto.statuses.length > 0
-            ? { status: { in: dto.statuses } } // Filter by statuses if provided
+            ? { status: { in: dto.statuses } }
             : {}),
         },
       },
     },
-    select: {
+     select: {
       id: true,
       name: true,
       nssNumber: true,
       email: true,
       role: true,
-      department: { select: { id: true, name: true } },
+      department: {
+        select: {
+          id: true,
+          name: true,
+          supervisor: { // department's supervisor
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
+      },
       unit: { select: { id: true, name: true } },
-      supervisor: { select: { id: true, name: true, email: true } },
       submissions: {
         select: {
           id: true,
@@ -545,4 +573,107 @@ async createUser(dto: CreateUserDto) {
     orderBy: { createdAt: 'desc' },
    });
   }
+
+ async assignPersonnelToDepartment(requesterId: number, dto: AssignPersonnelToDepartmentDto) {
+  // Verify requester is ADMIN or STAFF
+  const requester = await this.prisma.user.findUnique({ 
+    where: { id: requesterId },
+    select: { id: true, role: true },
+  });
+  if (!requester || !['ADMIN', 'STAFF'].includes(requester.role)) {
+    throw new HttpException(
+      'Unauthorized: Only ADMIN or STAFF can assign personnel to departments',
+      HttpStatus.FORBIDDEN,
+    );
+  }
+
+  // Verify department exists and is not deleted
+  const department = await this.prisma.department.findUnique({
+    where: { id: dto.departmentId },
+    select: { id: true, name: true, deletedAt: true },
+  });
+  if (!department || department.deletedAt) {
+    throw new HttpException('Department not found or deleted', HttpStatus.NOT_FOUND);
+  }
+
+  // Verify all submissionIds are valid, belong to PERSONNEL, and not deleted
+  const submissions = await this.prisma.submission.findMany({
+    where: {
+      id: { in: dto.submissionIds },
+      deletedAt: null,
+      user: { role: 'PERSONNEL', deletedAt: null },
+    },
+    select: {
+      id: true,
+      userId: true,
+      user: { select: { id: true, name: true, nssNumber: true, email: true } },
+      fullName: true,
+      nssNumber: true,
+      status: true,
+    },
+  });
+
+  if (submissions.length !== dto.submissionIds.length) {
+    const invalidIds = dto.submissionIds.filter((id) => !submissions.some((sub) => sub.id === id));
+    throw new HttpException(
+      `Invalid or non-PERSONNEL submission IDs: ${invalidIds.join(', ')}`,
+      HttpStatus.BAD_REQUEST,
+    );
+  }
+
+  // Extract userIds from submissions
+  const userIds = submissions.map((sub) => sub.userId);
+
+  // Start a transaction to update users and create audit logs
+  return this.prisma.$transaction(async (prisma) => {
+    // Update departmentId for all valid users
+    await prisma.user.updateMany({
+      where: {
+        id: { in: userIds },
+        role: 'PERSONNEL',
+        deletedAt: null,
+      },
+      data: {
+        departmentId: dto.departmentId,
+        updatedAt: new Date(),
+      },
+    });
+
+    // Create audit log entries for each submission
+    const auditLogs = submissions.map((sub) => ({
+      submissionId: sub.id,
+      action: 'PERSONNEL_ASSIGNED_TO_DEPARTMENT',
+      userId: requesterId,
+      details: `Personnel ${sub.user.name} (ID: ${sub.userId}, NSS: ${sub.nssNumber}) with submission ID ${sub.id} assigned to department: ${department.name} (ID: ${dto.departmentId}) by ${requester.role} (ID: ${requesterId})`,
+      createdAt: new Date(),
+    }));
+
+    await prisma.auditLog.createMany({
+      data: auditLogs,
+    });
+
+    // Return updated users with their new department and submission details
+    const updatedUsers = await prisma.user.findMany({
+      where: { id: { in: userIds } },
+      select: {
+        id: true,
+        name: true,
+        nssNumber: true,
+        email: true,
+        role: true,
+        department: { select: { id: true, name: true } },
+        updatedAt: true,
+        submissions: {
+          select: { id: true, fullName: true, nssNumber: true, status: true },
+          where: { id: { in: dto.submissionIds }, deletedAt: null },
+        },
+      },
+    });
+
+    return {
+      message: `Successfully assigned ${submissions.length} personnel to department: ${department.name}`,
+      users: updatedUsers,
+    };
+  });
+}
 }

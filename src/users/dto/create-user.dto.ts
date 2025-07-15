@@ -1,4 +1,4 @@
-import { IsString, IsEmail, IsEnum, IsOptional, IsInt, IsArray } from 'class-validator';
+import { IsString, IsEmail, IsEnum, IsOptional, IsInt, IsArray, IsNotEmpty } from 'class-validator';
 import { Role, SubmissionStatus } from '@prisma/client';
 
 export class CreateUserDto {
@@ -58,4 +58,15 @@ export class GetPersonnelDto {
   @IsArray()
   @IsEnum(SubmissionStatus, { each: true })
   statuses?: SubmissionStatus[];
+}
+
+export class AssignPersonnelToDepartmentDto {
+  @IsArray()
+  @IsInt({ each: true })
+  @IsNotEmpty()
+  submissionIds: number[];
+
+  @IsInt()
+  @IsNotEmpty()
+  departmentId: number;
 }

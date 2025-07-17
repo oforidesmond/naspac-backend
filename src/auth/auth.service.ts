@@ -36,7 +36,7 @@ export class AuthService {
       throw new HttpException('Invalid staff ID or password', HttpStatus.UNAUTHORIZED);
     }
 
-    return { id: user.id, staffId: user.staffId, role: user.role };
+    return { id: user.id, staffId: user.staffId, role: user.role, email: user.email , name: user.name};
   }
 
   // Validate PERSONNEL user
@@ -68,12 +68,12 @@ export class AuthService {
     throw new HttpException('Invalid NSS number or password', HttpStatus.UNAUTHORIZED);
   }
 
-  return { id: user.id, nssNumber: user.nssNumber, role: user.role, email: user.email };
+  return { id: user.id, nssNumber: user.nssNumber, role: user.role, email: user.email, name: user.name };
 }
   // Login for STAFF or ADMIN
   async loginStaffAdmin(staffId: string, password: string) {
     const user = await this.validateStaffAdmin(staffId, password);
-    const payload = { sub: user.id, identifier: user.staffId, role: user.role, email: user.email };
+    const payload = { sub: user.id, identifier: user.staffId, role: user.role, name: user.name, email: user.email };
     return {
       accessToken: this.jwtService.sign(payload),
       role: user.role,
@@ -83,7 +83,7 @@ export class AuthService {
   // Login for PERSONNEL
   async loginPersonnel(nssNumber: string, password: string) {
     const user = await this.validatePersonnel(nssNumber, password);
-    const payload = { sub: user.id, identifier: user.nssNumber, role: user.role, email: user.email || ''};
+    const payload = { sub: user.id, identifier: user.nssNumber, role: user.role, name: user.name, email: user.email || ''};
     return {
       accessToken: this.jwtService.sign(payload),
     };
@@ -91,7 +91,7 @@ export class AuthService {
 
   async validateToken(user: any) {
     // User is already validated by JwtAuthGuard
-    return { success: true, role: user.role, email: user.email };
+    return { success: true, userId: user.id, role: user.role, email: user.email, name: user.name };
   }
 
  async initOnboarding(nssNumber: string, email: string, initiatedBy: { id: number; role: string }) {

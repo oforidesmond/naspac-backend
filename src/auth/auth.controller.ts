@@ -1,8 +1,6 @@
 import { Controller, Post, Body, UseGuards, Request, Get, Req } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { RateLimitGuard } from './rate-limit.guard';
-import { CaptchaGuard } from './captcha.guard';
-
 import { Roles } from '../common/decorators/roles.decorator';
 import { InitOnboardingDto } from '../users/dto/init-onboarding.dto';
 import { JwtAuthGuard } from 'src/common/guards/auth-guard';
@@ -33,7 +31,7 @@ export class AuthController {
     @Get('validate')
   @UseGuards(JwtAuthGuard)
   async validateToken(@Req() req: any) {
-    return { success: true, role: req.user.role, email: req.user.email };
+    return { success: true, userId: req.user.id, role: req.user.role, email: req.user.email, name: req.user.name, username: req.user.username };
   }
 
   @Post('logout')
@@ -44,7 +42,7 @@ export class AuthController {
   }
 
   @Post('init-onboarding')
-  @UseGuards(JwtAuthGuard, RolesGuard, RateLimitGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('STAFF', 'ADMIN')
   async initOnboarding(@Body() body: InitOnboardingDto, @Request() req) {
     return this.authService.initOnboarding(body.nssNumber, body.email, req.user);

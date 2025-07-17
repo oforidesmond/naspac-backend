@@ -36,6 +36,7 @@ model User {
   supervisor          User?         @relation("SupervisorPersonnel", fields: [supervisorId], references: [id])
   supervisedPersonnel User[]        @relation("SupervisorPersonnel")
   departmentsSupervised Department[] @relation("DepartmentSupervisor")
+  templatesCreated    Template[]    @relation("UserTemplates")
 }
 
 model Submission {
@@ -55,6 +56,8 @@ model Submission {
   status              SubmissionStatus @default(PENDING)
   postingLetterUrl    String
   appointmentLetterUrl String
+  verificationFormUrl String?
+  jobConfirmationLetterUrl String?
   createdAt           DateTime      @default(now())
   updatedAt           DateTime      @updatedAt
   deletedAt           DateTime?
@@ -62,6 +65,17 @@ model Submission {
   documents           Document[]
   auditLogs           AuditLog[]
   @@unique([userId, nssNumber])
+}
+
+model Template {
+  id           Int       @id @default(autoincrement())
+  name         String    // e.g., "Job Confirmation Letter Template"
+  type         String    // e.g., "job_confirmation"
+  fileUrl      String    // Supabase URL to template file
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  createdBy    Int       // Admin user ID
+  user         User      @relation("UserTemplates", fields: [createdBy], references: [id])
 }
 
 model Department {

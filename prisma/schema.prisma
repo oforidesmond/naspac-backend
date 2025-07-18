@@ -37,6 +37,7 @@ model User {
   supervisedPersonnel User[]        @relation("SupervisorPersonnel")
   departmentsSupervised Department[] @relation("DepartmentSupervisor")
   templatesCreated    Template[]    @relation("UserTemplates")
+  notifications  Notification[] 
 }
 
 model Submission {
@@ -145,6 +146,19 @@ model OnboardingToken {
   user                User          @relation(fields: [userId], references: [id])
 }
 
+model Notification {
+  id          Int       @id @default(autoincrement())
+  title       String
+  description String
+  timestamp   DateTime  @default(now())
+  iconType    IconType
+  role        String    // Role: ADMIN, STAFF, PERSONNEL
+  userId      Int?      // Optional: Specific user ID for targeted notifications
+  user        User?     @relation(fields: [userId], references: [id])
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
 enum Role {
   PERSONNEL
   STAFF
@@ -165,4 +179,10 @@ enum Gender {
   MALE
   FEMALE
   OTHER
+}
+
+enum IconType {
+  SETTING
+  BELL
+  USER
 }

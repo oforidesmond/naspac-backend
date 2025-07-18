@@ -141,6 +141,28 @@ export class DocumentsService {
         },
       });
 
+        await this.prisma.notification.create({
+        data: {
+          title: 'Appointment Letter Endorsed',
+          description: 'Appointment letter has been endorsed successfully.',
+          timestamp: new Date(),
+          iconType: 'USER',
+          role: 'ADMIN',
+          userId: adminId,
+        },
+      });
+
+      await this.prisma.notification.create({
+        data: {
+          title: 'Appointment Letter Endorsed',
+          description: 'Your appointment letter has been endorsed successfully.',
+          timestamp: new Date(),
+          iconType: 'USER',
+          role: 'PERSONNEL',
+          userId: submission.userId,
+        },
+      });
+
       return { signedUrl, documentId: document.id };
     } catch (error) {
       console.error('Error signing PDF:', {
@@ -252,6 +274,18 @@ export class DocumentsService {
             createdAt: new Date(),
           },
         });
+
+         // Create notification for PERSONNEL
+          await prisma.notification.create({
+            data: {
+              title: 'Onboarding Completed',
+              description: 'Your onboarding process is complete.',
+              timestamp: new Date(),
+              iconType: 'USER',
+              role: 'PERSONNEL',
+              userId,
+            },
+          });
       }
 
       // Log download action
@@ -333,6 +367,50 @@ export class DocumentsService {
     },
   });
 
+  await this.prisma.notification.create({
+    data: {
+      title: 'Letter Template Uploaded',
+      description: 'Your letter template has been uploaded successfully.',
+      timestamp: new Date(),
+      iconType: 'SETTING',
+      role: 'ADMIN',
+      userId,
+    },
+  });
+  
+
   return { message: 'Template uploaded successfully', template: templateRecord };
+  }
+
+  async getNotifications(userId: number, role: string) {
+    // Verify user exists
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, role: true, deletedAt: true },
+    });
+    if (!user || user.deletedAt) {
+      throw new HttpException('User not found or deleted', HttpStatus.NOT_FOUND);
+    }
+
+    // Fetch notifications for the user's role or specific user
+    const notifications = await this.prisma.notification.findMany({
+      where: {
+        OR: [
+          { role }, // Role-specific notifications
+          { userId }, // User-specific notifications
+        ],
+      },
+      orderBy: { timestamp: 'desc' },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        timestamp: true,
+        iconType: true,
+        role: true,
+      },
+    });
+
+    return notifications;
   }
 }

@@ -155,5 +155,12 @@ async uploadTemplate(
   @Body('name') name: string,
 ) {
   return this.documentsService.uploadTemplate(req.user.id, template, name);
-}
+  }
+
+   @Get('notifications')
+  @UseGuards(JwtAuthGuard, RolesGuard, RateLimitGuard)
+  @Roles('ADMIN', 'STAFF', 'PERSONNEL')
+  async getNotifications(@Request() req) {
+    return this.documentsService.getNotifications(req.user.id, req.user.role);
+  }
 }

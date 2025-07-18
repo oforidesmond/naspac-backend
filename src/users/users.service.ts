@@ -295,6 +295,17 @@ async createUser(dto: CreateUserDto) {
       },
     });
 
+      await this.prisma.notification.create({
+        data: {
+          title: 'Submitted Verification Form',
+          description: 'Your verification form has been submitted successfully.',
+          timestamp: new Date(),
+          iconType: 'USER',
+          role: 'PERSONNEL',
+          userId: userId,
+        },
+      });
+
     return updatedSubmission;
   });
 }
@@ -826,7 +837,7 @@ async createUser(dto: CreateUserDto) {
       details: `Personnel ${sub.user.name} (ID: ${sub.userId}, NSS: ${sub.nssNumber}) with submission ID ${sub.id} assigned to department: ${department.name} (ID: ${dto.departmentId}) by ${requester.role} (ID: ${requesterId})`,
       createdAt: new Date(),
     }));
-
+    
     await prisma.auditLog.createMany({
       data: auditLogs,
     });

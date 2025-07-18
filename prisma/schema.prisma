@@ -115,12 +115,12 @@ model Document {
 
 model AuditLog {
   id                  Int           @id @default(autoincrement())
-  submissionId        Int
+  submissionId        Int?
   action              String
   userId              Int?
   details             String?
   createdAt           DateTime      @default(now())
-  submission          Submission    @relation(fields: [submissionId], references: [id])
+  submission          Submission?    @relation(fields: [submissionId], references: [id])
 }
 
 model PasswordResetToken {

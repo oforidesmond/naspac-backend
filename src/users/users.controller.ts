@@ -1,14 +1,15 @@
-import { Controller, Post, Body, UseGuards, UseInterceptors, UploadedFiles, Request, Get, ParseIntPipe, Param, HttpException, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, UseInterceptors, UploadedFiles, Request, Get, ParseIntPipe, Param, HttpException, HttpStatus, UploadedFile } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { AssignPersonnelToDepartmentDto, CreateDepartmentDto, CreateUserDto, GetPersonnelDto } from './dto/create-user.dto';
 import { Roles } from 'src/common/decorators/roles.decorator';
 import { JwtAuthGuard } from 'src/common/guards/auth-guard';
 import { RolesGuard } from 'src/common/guards/roles-guard';
-import { FilesInterceptor } from '@nestjs/platform-express';
+import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { GetSubmissionStatusCountsDto, SubmitOnboardingDto, UpdateSubmissionStatusDto } from './dto/submit-onboarding.dto';
 import { RateLimitGuard } from 'src/auth/rate-limit.guard';
 import { SupabaseStorageService } from 'src/documents/supabase-storage.service';
 import { PrismaService } from 'prisma/prisma.service';
+
 @Controller('users')
 export class UsersController {
   constructor(
@@ -16,6 +17,12 @@ export class UsersController {
     private prisma: PrismaService,
     private usersService: UsersService,
   ) {}
+
+  @Get('profile')
+@UseGuards(JwtAuthGuard)
+async getUserProfile(@Request() req) {
+  return this.usersService.getUserProfile(req.user.id);
+}
 
   @Post()
   @Roles('ADMIN')
@@ -140,7 +147,7 @@ export class UsersController {
   }
 
   @Post('update-submission-status/:submissionId')
-    @UseGuards(JwtAuthGuard, RolesGuard, RateLimitGuard)
+    @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles('ADMIN', 'STAFF')
     async updateSubmissionStatus(
       @Request() req,
@@ -187,7 +194,7 @@ export class UsersController {
   }
 
   @Post('personnel')
-  @UseGuards(JwtAuthGuard, RolesGuard, RateLimitGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN', 'STAFF')
   async getPersonnel(
     @Request() req,
@@ -204,5 +211,39 @@ async assignPersonnelToDepartment(
   @Body() dto: AssignPersonnelToDepartmentDto,
 ) {
   return this.usersService.assignPersonnelToDepartment(req.user.id, dto);
+  }
+
+  //report counts
+  @Get('reports-counts')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('ADMIN', 'STAFF')
+async getReportCounts(@Request() req) {
+  return this.usersService.getReportCounts(req.user.id);
+  }
+
+@Get('personnel-status')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('PERSONNEL')
+async getPersonnelStatus(@Request() req) {
+  return this.usersService.getPersonnelStatus(req.user.id);
+  }
+
+  @Post('submit-verification-form')
+@UseGuards(JwtAuthGuard, RolesGuard, RateLimitGuard)
+@Roles('PERSONNEL')
+@UseInterceptors(FileInterceptor('verificationForm', {
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype !== 'application/pdf') {
+      return cb(new Error('Only PDF files are allowed'), false);
+    }
+    cb(null, true);
+  },
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+}))
+async submitVerificationForm(
+  @Request() req,
+  @UploadedFile() verificationForm: Express.Multer.File,
+) {
+  return this.usersService.submitVerificationForm(req.user.id, verificationForm);
   }
 }

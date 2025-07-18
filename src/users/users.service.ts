@@ -1,22 +1,53 @@
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { AssignPersonnelToDepartmentDto, CreateDepartmentDto, CreateUserDto, GetPersonnelDto } from './dto/create-user.dto';
 import * as bcrypt from 'bcrypt';
+import moment from 'moment';
 import { PrismaService } from 'prisma/prisma.service';
 import { createClient } from '@supabase/supabase-js';
 import { HttpService } from '@nestjs/axios';
 import { GetSubmissionStatusCountsDto, SubmitOnboardingDto, UpdateSubmissionStatusDto } from './dto/submit-onboarding.dto';
 import { firstValueFrom } from 'rxjs';
+import { PDFDocument } from 'pdf-lib';
 
 @Injectable()
 export class UsersService {
   private supabase = createClient(
-    process.env.SUPABASE_URL || 'https://nrhrgsonhgbbcbjfqafs.supabase.co',
-    process.env.SUPABASE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5yaHJnc29uaGdiYmNiamZxYWZzIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1MjE1OTk2OCwiZXhwIjoyMDY3NzM1OTY4fQ.hRrJaNnFA0AKmTZocoXkccYk26-g8vy1YZkNJdZ4jaQ',
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_KEY
   );
 
   constructor(private prisma: PrismaService,
     private httpService: HttpService,
   ) {}
+
+  async getUserProfile(userId: number) {
+  // Fetch user profile
+  const user = await this.prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      name: true,
+      nssNumber: true,
+      staffId: true,
+      email: true,
+      role: true,
+      deletedAt: true,
+    },
+  });
+
+  // Check if user exists and is not deleted
+  if (!user || user.deletedAt) {
+    throw new HttpException('User not found or deleted', HttpStatus.NOT_FOUND);
+  }
+
+  // Return selected fields
+  return {
+    name: user.name || null,
+    nssNumber: user.nssNumber || null,
+    staffId: user.staffId || null,
+    email: user.email || null,
+    role: user.role,
+  };
+}
 
 async createUser(dto: CreateUserDto) {
   const hashedPassword = dto.password ? await bcrypt.hash(dto.password, 10) : null;
@@ -179,6 +210,95 @@ async createUser(dto: CreateUserDto) {
     });
   }
 
+  async submitVerificationForm(userId: number, verificationForm: Express.Multer.File) {
+  // Verify user is PERSONNEL
+  const user = await this.prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, role: true, deletedAt: true, nssNumber: true },
+  });
+  if (!user || user.deletedAt) {
+    throw new HttpException('User not found or deleted', HttpStatus.NOT_FOUND);
+  }
+  if (user.role !== 'PERSONNEL') {
+    throw new HttpException('Only PERSONNEL can submit verification forms', HttpStatus.FORBIDDEN);
+  }
+
+  // Fetch submission
+  const submission = await this.prisma.submission.findUnique({
+    where: { userId },
+    select: { id: true, status: true, deletedAt: true, verificationFormUrl: true },
+  });
+  if (!submission || submission.deletedAt) {
+    throw new HttpException('Submission not found or deleted', HttpStatus.NOT_FOUND);
+  }
+
+  // Validate submission status
+  if (submission.status !== 'ENDORSED') {
+    throw new HttpException(
+      `Verification form can only be submitted when status is ENDORSED, current status: ${submission.status}`,
+      HttpStatus.BAD_REQUEST,
+    );
+  }
+
+  // Validate file
+  if (!verificationForm || verificationForm.mimetype !== 'application/pdf') {
+    throw new HttpException('Verification form must be a PDF', HttpStatus.BAD_REQUEST);
+  }
+
+  // Initialize Supabase client
+  const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
+
+  // Upload verification form to Supabase
+  const fileKey = `verification-forms/${userId}-${Date.now()}.pdf`;
+  const { data, error } = await supabase.storage
+    .from('killermike')
+    .upload(fileKey, verificationForm.buffer, {
+      contentType: 'application/pdf',
+      cacheControl: '3600',
+    });
+  if (error) {
+    console.error('Failed to upload verification form:', error);
+    throw new HttpException(`Failed to upload verification form: ${error.message}`, HttpStatus.INTERNAL_SERVER_ERROR);
+  }
+  const { data: urlData } = supabase.storage.from('killermike').getPublicUrl(fileKey);
+  if (!urlData || !urlData.publicUrl) {
+    throw new HttpException('Failed to get public URL for verification form', HttpStatus.INTERNAL_SERVER_ERROR);
+  }
+  const verificationFormUrl = urlData.publicUrl;
+
+  // Update submission with verificationFormUrl in a transaction
+  return this.prisma.$transaction(async (prisma) => {
+    const updatedSubmission = await prisma.submission.update({
+      where: { id: submission.id },
+      data: {
+        verificationFormUrl,
+        updatedAt: new Date(),
+      },
+      select: {
+        id: true,
+        userId: true,
+        fullName: true,
+        nssNumber: true,
+        status: true,
+        verificationFormUrl: true,
+      },
+    });
+
+    // Create audit log
+    await prisma.auditLog.create({
+      data: {
+        submissionId: submission.id,
+        action: 'VERIFICATION_FORM_SUBMITTED',
+        userId,
+        details: `Personnel (ID: ${userId}, NSS: ${user.nssNumber || 'Unknown'}) submitted verification form for submission ID ${submission.id}`,
+        createdAt: new Date(),
+      },
+    });
+
+    return updatedSubmission;
+  });
+}
+
   async getGhanaUniversities() {
     try {
       const response = await firstValueFrom(
@@ -222,6 +342,7 @@ async createUser(dto: CreateUserDto) {
         divisionPostedTo: true,
         postingLetterUrl: true,
         appointmentLetterUrl: true,
+        verificationFormUrl: true,
         status: true,
         createdAt: true,
         updatedAt: true,
@@ -244,8 +365,9 @@ async createUser(dto: CreateUserDto) {
   // Verify submission exists
   const submission = await this.prisma.submission.findUnique({
     where: { id: submissionId },
+    select: { id: true, userId: true, fullName: true, nssNumber: true, status: true, deletedAt: true, jobConfirmationLetterUrl: true },
   });
-  if (!submission) {
+  if (!submission || submission.deletedAt) {
     throw new HttpException('Submission not found', HttpStatus.NOT_FOUND);
   }
 
@@ -269,15 +391,77 @@ async createUser(dto: CreateUserDto) {
     );
   }
 
+  const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
+
   // Start a transaction to update submission and create audit log
   return this.prisma.$transaction(async (prisma) => {
+     let jobConfirmationLetterUrl = submission.jobConfirmationLetterUrl;
+
+      if (dto.status === 'VALIDATED' && !jobConfirmationLetterUrl) {
+      // Fetch latest template
+      const template = await prisma.template.findFirst({
+        where: { type: 'job_confirmation' },
+        orderBy: { createdAt: 'desc' },
+        select: { fileUrl: true },
+      });
+      if (!template) {
+        throw new HttpException('No job confirmation letter template found', HttpStatus.INTERNAL_SERVER_ERROR);
+      }
+
+       // Download template from Supabase
+      const fileKey = template.fileUrl.replace(`${process.env.SUPABASE_URL}/storage/v1/object/public/killermike/`, '');
+      const { data: templateData, error: templateError } = await supabase.storage
+        .from('killermike')
+        .download(fileKey);
+      if (templateError || !templateData) {
+        throw new HttpException('Failed to retrieve template', HttpStatus.INTERNAL_SERVER_ERROR);
+      }
+
+       // Load PDF template
+      const templateBuffer = await templateData.arrayBuffer();
+      const pdfDoc = await PDFDocument.load(templateBuffer);
+  
+      // Fill form fields
+      const form = pdfDoc.getForm();
+      const nameField = form.getTextField('name');
+      const dateField = form.getTextField('date');
+      if (!nameField || !dateField) {
+        throw new HttpException('Template missing required form fields (name, date)', HttpStatus.INTERNAL_SERVER_ERROR);
+      }
+      nameField.setText(submission.fullName);
+      dateField.setText(moment().format('YYYY-MM-DD'));
+
+      // Flatten the form to embed text and remove field indicators
+      form.flatten();
+
+  // Save modified PDF
+      const pdfBytes = await pdfDoc.save();
+      const fileKeyOutput = `job-confirmation-letters/${submissionId}-${Date.now()}.pdf`;
+      const { error: uploadError } = await supabase.storage
+        .from('killermike')
+        .upload(fileKeyOutput, pdfBytes, {
+          contentType: 'application/pdf',
+          cacheControl: '3600',
+        });
+      if (uploadError) {
+        throw new HttpException(`Failed to upload job confirmation letter: ${uploadError.message}`, HttpStatus.INTERNAL_SERVER_ERROR);
+      }
+      const { data: urlData } = supabase.storage.from('killermike').getPublicUrl(fileKeyOutput);
+      if (!urlData || !urlData.publicUrl) {
+        throw new HttpException('Failed to get public URL for job confirmation letter', HttpStatus.INTERNAL_SERVER_ERROR);
+      }
+      jobConfirmationLetterUrl = urlData.publicUrl;
+    }
+
     // Update submission status
     const updatedSubmission = await prisma.submission.update({
       where: { id: submissionId },
       data: {
         status: dto.status,
+        jobConfirmationLetterUrl,
         updatedAt: new Date(),
       },
+      select: { id: true, userId: true, fullName: true, nssNumber: true, status: true, jobConfirmationLetterUrl: true },
     });
 
     // Create audit log entry
@@ -286,7 +470,9 @@ async createUser(dto: CreateUserDto) {
         submissionId,
         action: `STATUS_CHANGED_TO_${dto.status}`,
         userId,
-        details: dto.comment || `Submission status changed to ${dto.status}`,
+        details: `${dto.comment || `Submission status changed to ${dto.status}`}${
+          dto.status === 'VALIDATED' && jobConfirmationLetterUrl ? ' and job confirmation letter generated' : ''
+        }`,
         createdAt: new Date(),
       },
     });
@@ -471,17 +657,10 @@ async createUser(dto: CreateUserDto) {
     throw new HttpException('Unauthorized: Only admins or staff can access departments', HttpStatus.FORBIDDEN);
   }
 
-  // Get current year for filtering
-  // const currentYear = new Date().getFullYear();
-
   // Fetch departments
   return this.prisma.department.findMany({
     where: {
-      deletedAt: null, // Exclude soft-deleted departments
-      // createdAt: {
-      //   gte: new Date(currentYear, 0, 1), // Start of current year
-      //   lte: new Date(currentYear, 11, 31, 23, 59, 59), // End of current year
-      // },
+      deletedAt: null,
     },
     select: {
       id: true,
@@ -675,5 +854,190 @@ async createUser(dto: CreateUserDto) {
       users: updatedUsers,
     };
   });
-}
+  }
+
+  //report counts
+  
+  async getReportCounts(requesterId?: number) {
+  // Verify requester is ADMIN or STAFF
+  if (requesterId) {
+    const requester = await this.prisma.user.findUnique({
+      where: { id: requesterId },
+      select: { id: true, role: true },
+    });
+    if (!requester || !['ADMIN', 'STAFF'].includes(requester.role)) {
+      throw new HttpException(
+        'Unauthorized: Only ADMIN or STAFF can access report counts',
+        HttpStatus.FORBIDDEN,
+      );
+    }
+  }
+
+  const currentYear = new Date().getFullYear();
+  const nssNumberPattern = `%${currentYear}`;
+
+  // Run counts concurrently for performance
+  const [
+    totalPersonnel,
+    totalNonPersonnel,
+    totalDepartments,
+    personnelByDepartment,
+    acceptedCount,
+    auditLogCounts,
+    onboardedStudentCount,
+  ] = await Promise.all([
+    // 1. Total personnel (role: PERSONNEL, not deleted)
+    this.prisma.user.count({
+      where: { role: 'PERSONNEL', deletedAt: null },
+    }),
+
+    // 2. Total non-personnel (role not PERSONNEL, not deleted)
+    this.prisma.user.count({
+      where: { role: { not: 'PERSONNEL' }, deletedAt: null },
+    }),
+
+    // 3. Total departments (not deleted)
+    this.prisma.department.count({
+      where: { deletedAt: null },
+    }),
+
+    // 4. Personnel by department
+    this.prisma.user.groupBy({
+      by: ['departmentId'],
+      where: { role: 'PERSONNEL', deletedAt: null, departmentId: { not: null } },
+      _count: { id: true },
+    }).then(async (groups) => {
+      // Fetch department names for non-null departmentIds
+      const departmentIds = groups.map((g) => g.departmentId).filter((id) => id !== null);
+      const departments = await this.prisma.department.findMany({
+        where: { id: { in: departmentIds }, deletedAt: null },
+        select: { id: true, name: true },
+      });
+      return groups.map((group) => ({
+        departmentId: group.departmentId,
+        departmentName: departments.find((d) => d.id === group.departmentId)?.name || 'Unknown',
+        personnelCount: group._count.id,
+      }));
+    }),
+
+    // 5. Combined count of accepted submissions (ENDORSED, VALIDATED, COMPLETED)
+    this.prisma.submission.count({
+      where: {
+        status: { in: ['ENDORSED', 'VALIDATED', 'COMPLETED'] },
+        deletedAt: null,
+        user: { role: 'PERSONNEL', deletedAt: null },
+        yearOfNss: currentYear,
+      },
+    }),
+
+    // 6. Submission status counts for PENDING, PENDING_ENDORSEMENT, REJECTED using AuditLog
+    Promise.all(
+      ['PENDING', 'PENDING_ENDORSEMENT', 'REJECTED'].map(async (status) => {
+        const submissionIds = await this.prisma.auditLog.findMany({
+          where: {
+            action: `STATUS_CHANGED_TO_${status}`,
+            submission: {
+              deletedAt: null,
+              user: { role: 'PERSONNEL', deletedAt: null },
+              yearOfNss: currentYear,
+            },
+          },
+          select: { submissionId: true },
+          distinct: ['submissionId'], // Ensure unique submission IDs
+        });
+        return { status, count: submissionIds.length };
+      })
+    ),
+
+    // 7. Onboarded student count (PERSONNEL with used OnboardingToken)
+    this.prisma.user.count({
+      where: {
+        role: 'PERSONNEL',
+        deletedAt: null,
+        nssNumber: { endsWith: nssNumberPattern },
+        OnboardingToken: {
+          some: {
+            used: true,
+            deletedAt: null,
+          },
+        },
+      },
+    }),
+  ]);
+
+  // Map audit log counts to statusCounts object
+  const statusCounts = {
+    pending: auditLogCounts.find((c) => c.status === 'PENDING')?.count || 0,
+    pendingEndorsement: auditLogCounts.find((c) => c.status === 'PENDING_ENDORSEMENT')?.count || 0,
+    endorsed: 0, // Will be part of acceptedCount
+    validated: 0, // Will be part of acceptedCount
+    completed: 0, // Will be part of acceptedCount
+    rejected: auditLogCounts.find((c) => c.status === 'REJECTED')?.count || 0,
+  };
+
+  return {
+    totalPersonnel,
+    totalNonPersonnel,
+    totalDepartments,
+    personnelByDepartment,
+    statusCounts,
+    acceptedCount, // Combined count for ENDORSED, VALIDATED, COMPLETED
+    onboardedStudentCount,
+   };
+  }
+
+  // Get personnel status for a specific user
+  async getPersonnelStatus(userId: number) {
+  // Verify user is PERSONNEL
+  const user = await this.prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, role: true, deletedAt: true },
+  });
+  if (!user || user.deletedAt) {
+    throw new HttpException('User not found or deleted', HttpStatus.NOT_FOUND);
+  }
+  if (user.role !== 'PERSONNEL') {
+    throw new HttpException('Only PERSONNEL can access this endpoint', HttpStatus.FORBIDDEN);
+  }
+
+  // Fetch submission for the user
+  const submission = await this.prisma.submission.findUnique({
+    where: { userId },
+    select: { id: true, status: true, deletedAt: true },
+  });
+
+  // Calculate completion percentage based on status
+  const statusCompletionMap: Record<string, number> = {
+    PENDING: 20,
+    PENDING_ENDORSEMENT: 40,
+    ENDORSED: 60,
+    VALIDATED: 80,
+    COMPLETED: 100,
+    REJECTED: 0,
+  };
+  const completionPercentage = submission && !submission.deletedAt
+    ? statusCompletionMap[submission.status] || 0
+    : 0;
+
+  // Calculate service days (from October 1st to today)
+  let serviceDays = 0;
+  if (submission && !submission.deletedAt && submission.status === 'COMPLETED') {
+    const today = new Date(); // July 16, 2025
+    const currentYear = today.getFullYear();
+    // Determine the start of the current service year (October 1st)
+    const serviceStartYear = today.getMonth() >= 9 ? currentYear : currentYear - 1; // 9 = October
+    const serviceStart = new Date(serviceStartYear, 9, 1); // October 1st
+
+    // Calculate days difference
+    const timeDiff = today.getTime() - serviceStart.getTime();
+    serviceDays = Math.floor(timeDiff / (1000 * 60 * 60 * 24)); // Convert ms to days
+    serviceDays = Math.max(0, serviceDays); // Ensure non-negative
+  }
+
+  return {
+    submissionStatus: submission && !submission.deletedAt ? submission.status : null,
+    completionPercentage,
+    serviceDays,
+   };
+  }
 }

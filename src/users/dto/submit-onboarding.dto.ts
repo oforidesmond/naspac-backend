@@ -43,10 +43,13 @@ export class SubmitOnboardingDto {
   divisionPostedTo: string;
 
   @IsOptional()
-  postingLetter: any; // File upload (handled by NestJS FileInterceptor)
+  postingLetter: any;
 
   @IsOptional()
-  appointmentLetter: any; // File upload (handled by NestJS FileInterceptor)
+  appointmentLetter: any;
+
+  @IsOptional()
+  verificationForm: any;
 }
 
 export class UpdateSubmissionStatusDto {

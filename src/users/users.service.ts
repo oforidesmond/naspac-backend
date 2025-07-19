@@ -206,6 +206,17 @@ async createUser(dto: CreateUserDto) {
       },
     });
 
+    // Create audit log entry
+    await prisma.auditLog.create({
+      data: {
+        submissionId: submission.id,
+        action: `STATUS_CHANGED_TO_PENDING`,
+        userId,
+        details: `${`Submission status changed to PENDING`}`,
+        createdAt: new Date(),
+      },
+    });
+
     return submission;
     });
   }
@@ -896,6 +907,7 @@ async createUser(dto: CreateUserDto) {
     acceptedCount,
     auditLogCounts,
     onboardedStudentCount,
+    pendingCount,
   ] = await Promise.all([
     // 1. Total personnel (role: PERSONNEL, not deleted)
     this.prisma.user.count({
@@ -943,7 +955,7 @@ async createUser(dto: CreateUserDto) {
 
     // 6. Submission status counts for PENDING, PENDING_ENDORSEMENT, REJECTED using AuditLog
     Promise.all(
-      ['PENDING', 'PENDING_ENDORSEMENT', 'REJECTED'].map(async (status) => {
+      ['PENDING_ENDORSEMENT', 'REJECTED'].map(async (status) => {
         const submissionIds = await this.prisma.auditLog.findMany({
           where: {
             action: `STATUS_CHANGED_TO_${status}`,
@@ -974,6 +986,16 @@ async createUser(dto: CreateUserDto) {
         },
       },
     }),
+
+    // 8. Pending count
+      this.prisma.submission.count({
+      where: {
+        status: { in: ['PENDING'] },
+        deletedAt: null,
+        user: { role: 'PERSONNEL', deletedAt: null },
+        yearOfNss: currentYear,
+      },
+    }),
   ]);
 
   // Map audit log counts to statusCounts object
@@ -992,8 +1014,9 @@ async createUser(dto: CreateUserDto) {
     totalDepartments,
     personnelByDepartment,
     statusCounts,
-    acceptedCount, // Combined count for ENDORSED, VALIDATED, COMPLETED
+    acceptedCount,
     onboardedStudentCount,
+    pendingCount,
    };
   }
 
@@ -1007,7 +1030,7 @@ async createUser(dto: CreateUserDto) {
   if (!user || user.deletedAt) {
     throw new HttpException('User not found or deleted', HttpStatus.NOT_FOUND);
   }
-  if (user.role !== 'PERSONNEL') {
+  if (!user || !['ADMIN', 'STAFF', 'PERSONNEL'].includes(user.role)) {
     throw new HttpException('Only PERSONNEL can access this endpoint', HttpStatus.FORBIDDEN);
   }
 
@@ -1036,7 +1059,7 @@ async createUser(dto: CreateUserDto) {
     const today = new Date(); // July 16, 2025
     const currentYear = today.getFullYear();
     // Determine the start of the current service year (October 1st)
-    const serviceStartYear = today.getMonth() >= 9 ? currentYear : currentYear - 1; // 9 = October
+    const serviceStartYear = today.getMonth() >= 9 ? currentYear + 1 : currentYear; // 9 = October
     const serviceStart = new Date(serviceStartYear, 9, 1); // October 1st
 
     // Calculate days difference

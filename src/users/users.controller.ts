@@ -223,7 +223,7 @@ async getReportCounts(@Request() req) {
 
 @Get('personnel-status')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('PERSONNEL')
+@Roles('PERSONNEL','ADMIN', 'STAFF')
 async getPersonnelStatus(@Request() req) {
   return this.usersService.getPersonnelStatus(req.user.id);
   }

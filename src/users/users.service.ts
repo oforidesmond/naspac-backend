@@ -8,6 +8,7 @@ import { HttpService } from '@nestjs/axios';
 import { GetSubmissionStatusCountsDto, SubmitOnboardingDto, UpdateSubmissionStatusDto } from './dto/submit-onboarding.dto';
 import { firstValueFrom } from 'rxjs';
 import { PDFDocument } from 'pdf-lib';
+import { NotificationsService } from 'src/notifications/notifications.service';
 
 @Injectable()
 export class UsersService {
@@ -18,6 +19,7 @@ export class UsersService {
 
   constructor(private prisma: PrismaService,
     private httpService: HttpService,
+    private notificationsService: NotificationsService,
   ) {}
 
   async getUserProfile(userId: number) {
@@ -217,6 +219,44 @@ async createUser(dto: CreateUserDto) {
       },
     });
 
+    await prisma.notification.create({
+      data: {
+        title: 'Submission Created',
+        description: `Your onboarding submission has been submitted and is pending review.`,
+        timestamp: new Date(),
+        iconType: 'USER',
+        userId,
+        role: 'PERSONNEL',
+      },
+    });
+
+    // Create notification for ADMIN/STAFF
+    await prisma.notification.create({
+      data: {
+        title: 'New Submission Received',
+        description: `A new submission (ID: ${submission.id}, NSS: ${dto.nssNumber}) has been submitted by Personnel (ID: ${userId}).`,
+        timestamp: new Date(),
+        iconType: 'BELL',
+        role: 'ADMIN',
+      },
+    });
+
+     // Create notification for ADMIN/STAFF
+    await prisma.notification.create({
+      data: {
+        title: 'New Submission Received',
+        description: `A new submission (ID: ${submission.id}, NSS: ${dto.nssNumber}) has been submitted by Personnel (ID: ${userId}).`,
+        timestamp: new Date(),
+        iconType: 'BELL',
+        role: 'STAFF',
+      },
+    });
+
+    await this.notificationsService.sendSubmissionConfirmationEmail(
+      dto.email,
+      dto.fullName,
+    );
+
     return submission;
     });
   }
@@ -316,6 +356,43 @@ async createUser(dto: CreateUserDto) {
           userId: userId,
         },
       });
+
+      await prisma.notification.create({
+      data: {
+        title: 'New Verification Form Submitted',
+        description: `A verification form for submission (ID: ${submission.id}, NSS: ${user.nssNumber || 'Unknown'}) has been submitted by Personnel (ID: ${userId}).`,
+        timestamp: new Date(),
+        iconType: 'BELL',
+        role: 'STAFF',
+      },
+    });
+
+      await prisma.notification.create({
+      data: {
+        title: 'New Verification Form Submitted',
+        description: `A verification form for submission (ID: ${submission.id}, NSS: ${user.nssNumber || 'Unknown'}) has been submitted by Personnel (Name: ${updatedSubmission.fullName}).`,
+        timestamp: new Date(),
+        iconType: 'BELL',
+        role: 'ADMIN',
+      },
+    });
+
+     // Fetch all STAFF users to send emails
+    const staffUsers = await prisma.user.findMany({
+      where: { role: 'STAFF', deletedAt: null },
+      select: { email: true, name: true },
+    });
+
+    // Queue email for each STAFF user
+    for (const staff of staffUsers) {
+      await this.notificationsService.sendVerificationFormEmail(
+        staff.email,
+        staff.name,
+        updatedSubmission.fullName,
+        updatedSubmission.nssNumber,
+        submission.id
+      );
+    }
 
     return updatedSubmission;
   });
@@ -499,6 +576,33 @@ async createUser(dto: CreateUserDto) {
       },
     });
 
+    // Create notification for PERSONNEL
+    if (['ENDORSED','VALIDATED', 'COMPLETED'].includes(dto.status)) {
+      await prisma.notification.create({
+        data: {
+          title: `Submission ${dto.status}`,
+          description: `Your submission has been ${dto.status.toLowerCase()}.${
+            dto.status === 'VALIDATED' ? ' Please download your job confirmation letter.' : ''
+          }`,
+          timestamp: new Date(),
+          iconType: dto.status === 'VALIDATED' ? 'BELL' : 'USER',
+          role: 'PERSONNEL',
+          userId: updatedSubmission.userId,
+        },
+      });
+    }
+
+    // Notify ADMIN/STAFF of status change
+    await prisma.notification.create({
+      data: {
+        title: `Submission Status Updated`,
+        description: `Submission (ID: ${submissionId}, NSS: ${submission.nssNumber}) status changed to ${dto.status} by ${user.name}.`,
+        timestamp: new Date(),
+        iconType: 'SETTING',
+        role: user.role === 'ADMIN' ? 'ADMIN' : 'STAFF',
+      },
+    });
+
     return updatedSubmission;
     });
   }
@@ -668,6 +772,12 @@ async createUser(dto: CreateUserDto) {
         select: { id: true, name: true },
       });
     }
+
+     await this.notificationsService.sendSupervisorAssignmentEmail(
+      supervisor.email,
+      supervisor.name,
+      department.name
+    );
 
     return department;
   });

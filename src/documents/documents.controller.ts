@@ -158,7 +158,7 @@ async uploadTemplate(
   }
 
    @Get('notifications')
-  @UseGuards(JwtAuthGuard, RolesGuard, RateLimitGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN', 'STAFF', 'PERSONNEL')
   async getNotifications(@Request() req) {
     return this.documentsService.getNotifications(req.user.id, req.user.role);

@@ -44,4 +44,99 @@ export class NotificationsService {
       },
     );
   }
+
+  async sendSubmissionConfirmationEmail(to: string, fullName: string) {
+  await this.emailQueue.add(
+    'send-email',
+    {
+      to,
+      subject: 'Onboarding Submission Confirmation',
+      content: `
+        <h1>Thank You for Your Submission!</h1>
+        <p>Dear ${fullName},</p>
+        <p>Your onboarding submission has been successfully received.</p>
+        <p>We will review it and notify you of any updates. If you have any questions, please contact our support team.</p>
+        <p>Best regards,<br>COCOBOD NSS Team</p>
+      `,
+    },
+    {
+      attempts: 3,
+      backoff: 5000,
+      }
+    );
+  }
+
+  async sendSupervisorAssignmentEmail(to: string, supervisorName: string, departmentName: string) {
+  await this.emailQueue.add(
+    'send-email',
+    {
+      to,
+      subject: 'NSP Supervisor Assignment',
+      content: `
+        <h1>Supervisor Assignment Notification</h1>
+        <p>Dear ${supervisorName},</p>
+        <p>You have been assigned as the supervisor over NSPs for the <strong>${departmentName}</strong> department.</p>
+        <p>Please review your responsibilities and contact the administration if you have any questions.</p>
+        <p>Best regards,<br>COCOBOD Administration Team</p>
+      `,
+    },
+    {
+      attempts: 3,
+      backoff: 5000,
+      }
+   );
+  }
+
+async sendVerificationFormEmail(
+  to: string,
+  staffName: string,
+  personnelName: string,
+  nssNumber: string,
+  submissionId: number
+) {
+  await this.emailQueue.add(
+    'send-email',
+    {
+      to,
+      subject: 'NSP Verification Form Submission',
+      content: `
+        <h1>New Verification Form Submission</h1>
+        <p>Dear ${staffName},</p>
+        <p>A verification form has been submitted by ${personnelName} (NSS: ${nssNumber}) for Submission ID: ${submissionId}.</p>
+        <p>Please review the submission in your dashboard and take appropriate action.</p>
+        <p>Best regards,<br>COCOBOD Administration Team</p>
+      `,
+    },
+    {
+      attempts: 3,
+      backoff: 5000,
+    }
+  );
+}
+
+async sendDocumentEndorsedEmail(
+  to: string,
+  personnelName: string,
+  nssNumber: string,
+  submissionId: number
+) {
+  await this.emailQueue.add(
+    'send-email',
+    {
+      to,
+      subject: 'Appointment Letter Endorsement Notification',
+      content: `
+        <h1>Appointment Letter Endorsement Notification</h1>
+        <p>Dear ${personnelName},</p>
+        <p>Your appointment letter has been successfully endorsed.</p>
+        <p>Please check your dashboard for further details or contact the administration if you have any questions.</p>
+        <p>Best regards,<br>COCOBOD Administration Team</p>
+      `,
+    },
+    {
+      attempts: 3,
+      backoff: 5000,
+    }
+  );
+}
 }

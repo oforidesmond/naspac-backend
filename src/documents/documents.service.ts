@@ -5,12 +5,14 @@ import { createHash } from 'crypto';
 import { PrismaService } from 'prisma/prisma.service';
 import { Readable } from 'stream';
 import { createClient } from '@supabase/supabase-js';
+import { NotificationsService } from 'src/notifications/notifications.service';
 
 @Injectable()
 export class DocumentsService {
   constructor(
     private prisma: PrismaService,
     private supabaseStorageService: SupabaseStorageService,
+    private notificationsService: NotificationsService,
   ) {}
 
   async signDocument(
@@ -141,21 +143,11 @@ export class DocumentsService {
         },
       });
 
-        await this.prisma.notification.create({
-        data: {
-          title: 'Appointment Letter Endorsed',
-          description: 'Appointment letter has been endorsed successfully.',
-          timestamp: new Date(),
-          iconType: 'USER',
-          role: 'ADMIN',
-          userId: adminId,
-        },
-      });
-
+       // Create notification for PERSONNEL
       await this.prisma.notification.create({
         data: {
-          title: 'Appointment Letter Endorsed',
-          description: 'Your appointment letter has been endorsed successfully.',
+          title: 'Document Endorsed',
+          description: `Your document (Submission ID: ${submissionId}, NSS: ${submission.user.nssNumber || 'Unknown'}) has been endorsed successfully.`,
           timestamp: new Date(),
           iconType: 'USER',
           role: 'PERSONNEL',
@@ -163,6 +155,32 @@ export class DocumentsService {
         },
       });
 
+        await this.prisma.notification.create({
+        data: {
+          title: 'Appointment Letter Endorsed',
+          description: `Appointment letter for ${submission.user.nssNumber || 'Unknown'} has been endorsed successfully.`,
+          timestamp: new Date(),
+          iconType: 'USER',
+          role: 'ADMIN',
+        },
+      });
+
+      await this.prisma.notification.create({
+        data: {
+          title: 'Appointment Letter Endorsed',
+          description: `Document (Submission ID: ${submissionId}, NSS: ${submission.user.nssNumber || 'Unknown'}) has been endorsed by Admin (ID: ${adminId}).`,
+          timestamp: new Date(),
+          iconType: 'BELL',
+          role: 'STAFF',
+        },
+      });
+
+       await this.notificationsService.sendDocumentEndorsedEmail(
+        submission.user.email,
+        submission.user.name,
+        submission.user.nssNumber || 'Unknown',
+        submissionId
+      );
       return { signedUrl, documentId: document.id };
     } catch (error) {
       console.error('Error signing PDF:', {
@@ -382,7 +400,7 @@ export class DocumentsService {
   return { message: 'Template uploaded successfully', template: templateRecord };
   }
 
-  async getNotifications(userId: number, role: string) {
+  async getNotifications(userId: number, role: string, skip = 0, take = 10) {
     // Verify user exists
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -394,13 +412,15 @@ export class DocumentsService {
 
     // Fetch notifications for the user's role or specific user
     const notifications = await this.prisma.notification.findMany({
-      where: {
-        OR: [
-          { role }, // Role-specific notifications
-          { userId }, // User-specific notifications
-        ],
-      },
+    where: {
+      OR: [
+        { role, userId: role === 'PERSONNEL' ? userId : undefined }, // Role-specific for non-personnel, user-specific for personnel
+        { userId, role }, // User-specific notifications
+      ],
+    },
       orderBy: { timestamp: 'desc' },
+      skip,
+      take,
       select: {
         id: true,
         title: true,

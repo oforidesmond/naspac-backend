@@ -5,10 +5,12 @@ import { PrismaService } from 'prisma/prisma.service';
 import { MulterModule } from '@nestjs/platform-express';
 import { HttpModule, HttpService } from '@nestjs/axios';
 import { SupabaseStorageService } from 'src/documents/supabase-storage.service';
+import { NotificationsModule } from 'src/notifications/notifications.module';
 
 @Module({
   imports: [
     HttpModule,
+    NotificationsModule,
     MulterModule.register({
       limits: {
         fileSize: 5 * 1024 * 1024, // 5MB limit

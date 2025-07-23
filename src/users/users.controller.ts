@@ -1,6 +1,6 @@
-import { Controller, Post, Body, UseGuards, UseInterceptors, UploadedFiles, Request, Get, ParseIntPipe, Param, HttpException, HttpStatus, UploadedFile } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, UseInterceptors, UploadedFiles, Request, Get, ParseIntPipe, Param, HttpException, HttpStatus, UploadedFile, Patch, Delete } from '@nestjs/common';
 import { UsersService } from './users.service';
-import { AssignPersonnelToDepartmentDto, CreateDepartmentDto, CreateUserDto, GetPersonnelDto } from './dto/create-user.dto';
+import { AssignPersonnelToDepartmentDto, ChangePersonnelDepartmentDto, CreateDepartmentDto, CreateUserDto, GetPersonnelDto, UpdateDepartmentDto } from './dto/create-user.dto';
 import { Roles } from 'src/common/decorators/roles.decorator';
 import { JwtAuthGuard } from 'src/common/guards/auth-guard';
 import { RolesGuard } from 'src/common/guards/roles-guard';
@@ -9,6 +9,7 @@ import { GetSubmissionStatusCountsDto, SubmitOnboardingDto, UpdateSubmissionStat
 import { RateLimitGuard } from 'src/auth/rate-limit.guard';
 import { SupabaseStorageService } from 'src/documents/supabase-storage.service';
 import { PrismaService } from 'prisma/prisma.service';
+import { UpdateStaffDto } from './dto/update-user.dto';
 
 @Controller('users')
 export class UsersController {
@@ -245,5 +246,51 @@ async submitVerificationForm(
   @UploadedFile() verificationForm: Express.Multer.File,
 ) {
   return this.usersService.submitVerificationForm(req.user.id, verificationForm);
+  }
+
+   @Patch('staff/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard, RateLimitGuard)
+  @Roles('ADMIN')
+  async updateStaff(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateStaffDto,
+    @Request() req,
+  ) {
+    return this.usersService.updateStaff(id, dto, req.user.id);
+  }
+
+  @Patch('department/:id')
+@UseGuards(JwtAuthGuard, RolesGuard, RateLimitGuard)
+@Roles('ADMIN')
+async updateDepartment(
+  @Param('id', ParseIntPipe) id: number,
+  @Body() dto: UpdateDepartmentDto,
+  @Request() req,
+) {
+  return this.usersService.updateDepartment(id, dto, req.user.id);
+}
+
+@Delete('staff/:id/delete')
+  @UseGuards(JwtAuthGuard, RolesGuard, RateLimitGuard)
+  @Roles('ADMIN')
+  async deleteStaff(@Param('id', ParseIntPipe) id: number, @Request() req) {
+    return this.usersService.deleteStaff(id, req.user.id);
+  }
+
+  @Delete('department/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard, RateLimitGuard)
+  @Roles('ADMIN')
+  async deleteDepartment(@Param('id', ParseIntPipe) id: number, @Request() req) {
+    return this.usersService.deleteDepartment(id, req.user.id);
+  }
+
+  @Patch('change-department')
+  @UseGuards(JwtAuthGuard, RolesGuard, RateLimitGuard)
+  @Roles('ADMIN', 'STAFF')
+  async changePersonnelDepartment(
+    @Body() dto: ChangePersonnelDepartmentDto,
+    @Request() req,
+  ) {
+    return this.usersService.changePersonnelDepartment(dto, req.user.id);
   }
 }

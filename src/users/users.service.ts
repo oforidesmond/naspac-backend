@@ -1,5 +1,5 @@
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
-import { AssignPersonnelToDepartmentDto, CreateDepartmentDto, CreateUserDto, GetPersonnelDto } from './dto/create-user.dto';
+import { AssignPersonnelToDepartmentDto, ChangePersonnelDepartmentDto, CreateDepartmentDto, CreateUserDto, GetPersonnelDto, UpdateDepartmentDto } from './dto/create-user.dto';
 import * as bcrypt from 'bcrypt';
 import moment from 'moment';
 import { PrismaService } from 'prisma/prisma.service';
@@ -9,6 +9,7 @@ import { GetSubmissionStatusCountsDto, SubmitOnboardingDto, UpdateSubmissionStat
 import { firstValueFrom } from 'rxjs';
 import { PDFDocument } from 'pdf-lib';
 import { NotificationsService } from 'src/notifications/notifications.service';
+import { UpdateStaffDto } from './dto/update-user.dto';
 
 @Injectable()
 export class UsersService {
@@ -1183,5 +1184,398 @@ async createUser(dto: CreateUserDto) {
     completionPercentage,
     serviceDays,
    };
+  }
+
+  async updateStaff(staffId: number, dto: UpdateStaffDto, requesterId: number) {
+  // Verify requester is ADMIN
+  const requester = await this.prisma.user.findUnique({
+    where: { id: requesterId },
+    select: { role: true },
+  });
+  if (!requester || requester.role !== 'ADMIN') {
+    throw new HttpException('Only ADMIN can update staff information', HttpStatus.FORBIDDEN);
+  }
+
+  // Verify staff user exists and is STAFF or ADMIN
+  const staff = await this.prisma.user.findUnique({
+    where: { id: staffId },
+    select: { id: true, role: true, deletedAt: true },
+  });
+  if (!staff || staff.deletedAt) {
+    throw new HttpException('Staff user not found or deleted', HttpStatus.NOT_FOUND);
+  }
+  if (!['ADMIN', 'STAFF'].includes(staff.role)) {
+    throw new HttpException('Can only update ADMIN or STAFF users', HttpStatus.BAD_REQUEST);
+  }
+
+  // Update staff user
+  return this.prisma.$transaction(async (prisma) => {
+    const updatedStaff = await prisma.user.update({
+      where: { id: staffId },
+      data: {
+        name: dto.name,
+        staffId: dto.staffId,
+        email: dto.email,
+        role: dto.role,
+        updatedAt: new Date(),
+      },
+      select: { id: true, name: true, staffId: true, email: true, role: true },
+    });
+
+    // Create audit log
+    await prisma.auditLog.create({
+      data: {
+        submissionId: null,
+        action: 'STAFF_UPDATED',
+        userId: requesterId,
+        details: `Admin (ID: ${requesterId}) updated staff (ID: ${staffId}, Email: ${updatedStaff.email})`,
+        createdAt: new Date(),
+      },
+    });
+
+    // Notify updated staff user
+    await prisma.notification.create({
+      data: {
+        title: 'Profile Updated',
+        description: `Your profile has been updated by admin. New details: Name - ${dto.name || updatedStaff.name}, Email - ${dto.email || updatedStaff.email}, Role - ${dto.role || updatedStaff.role}.`,
+        timestamp: new Date(),
+        iconType: 'USER',
+        role: updatedStaff.role,
+        userId: staffId,
+      },
+    });
+
+    // Notify ADMIN/STAFF
+    await prisma.notification.create({
+      data: {
+        title: 'Staff Profile Updated',
+        description: `Staff (ID: ${staffId}, Email: ${updatedStaff.email}) profile updated by Admin (ID: ${requesterId}).`,
+        timestamp: new Date(),
+        iconType: 'SETTING',
+        role: 'ADMIN',
+      },
+    });
+
+    return updatedStaff;
+  });
+}
+
+async updateDepartment(departmentId: number, dto: UpdateDepartmentDto, requesterId: number) {
+  // Verify requester is ADMIN
+  const requester = await this.prisma.user.findUnique({
+    where: { id: requesterId },
+    select: { role: true },
+  });
+  if (!requester || requester.role !== 'ADMIN') {
+    throw new HttpException('Only ADMIN can update department information', HttpStatus.FORBIDDEN);
+  }
+
+  // Verify department exists
+  const department = await this.prisma.department.findUnique({
+    where: { id: departmentId },
+    select: { id: true, name: true, supervisorId: true, deletedAt: true },
+  });
+  if (!department || department.deletedAt) {
+    throw new HttpException('Department not found or deleted', HttpStatus.NOT_FOUND);
+  }
+
+  // Verify supervisor (if provided)
+  if (dto.supervisorId) {
+    const supervisor = await this.prisma.user.findUnique({
+      where: { id: dto.supervisorId },
+      select: { id: true, role: true, deletedAt: true },
+    });
+    if (!supervisor || supervisor.deletedAt || !['ADMIN', 'STAFF'].includes(supervisor.role)) {
+      throw new HttpException('Invalid or deleted supervisor', HttpStatus.BAD_REQUEST);
+    }
+  }
+
+  // Update department
+  return this.prisma.$transaction(async (prisma) => {
+    const updatedDepartment = await prisma.department.update({
+      where: { id: departmentId },
+      data: {
+        name: dto.name,
+        supervisorId: dto.supervisorId,
+        updatedAt: new Date(),
+      },
+      select: { id: true, name: true, supervisorId: true },
+    });
+
+    // Create audit log
+    await prisma.auditLog.create({
+      data: {
+        submissionId: null,
+        action: 'DEPARTMENT_UPDATED',
+        userId: requesterId,
+        details: `Admin (ID: ${requesterId}) updated department (ID: ${departmentId}, Name: ${updatedDepartment.name})`,
+        createdAt: new Date(),
+      },
+    });
+
+    // Notify new supervisor (if changed)
+    if (dto.supervisorId && dto.supervisorId !== department.supervisorId) {
+      await prisma.notification.create({
+        data: {
+          title: 'Assigned as Department Supervisor',
+          description: `You have been assigned as the supervisor for department ${updatedDepartment.name}.`,
+          timestamp: new Date(),
+          iconType: 'USER',
+          role: 'STAFF',
+          userId: dto.supervisorId,
+        },
+      });
+    }
+
+    // Notify ADMIN/STAFF
+    await prisma.notification.create({
+      data: {
+        title: 'Department Updated',
+        description: `Department (ID: ${departmentId}, Name: ${updatedDepartment.name}) updated by Admin (ID: ${requesterId}).`,
+        timestamp: new Date(),
+        iconType: 'SETTING',
+        role: 'ADMIN',
+      },
+    });
+
+    return updatedDepartment;
+    });
+  }
+
+  async deleteStaff(staffId: number, requesterId: number) {
+  // Verify requester is ADMIN
+  const requester = await this.prisma.user.findUnique({
+    where: { id: requesterId },
+    select: { role: true },
+  });
+  if (!requester || requester.role !== 'ADMIN') {
+    throw new HttpException('Only ADMIN can delete staff', HttpStatus.FORBIDDEN);
+  }
+
+  // Verify staff user exists and is STAFF or ADMIN
+  const staff = await this.prisma.user.findUnique({
+    where: { id: staffId },
+    select: { id: true, role: true, email: true, name: true, staffId: true, deletedAt: true },
+  });
+  if (!staff || staff.deletedAt) {
+    throw new HttpException('Staff user not found or already deleted', HttpStatus.NOT_FOUND);
+  }
+  if (!['ADMIN', 'STAFF'].includes(staff.role)) {
+    throw new HttpException('Can only delete ADMIN or STAFF users', HttpStatus.BAD_REQUEST);
+  }
+  if (staffId === requesterId) {
+    throw new HttpException('Cannot delete your own account', HttpStatus.BAD_REQUEST);
+  }
+
+  // Check if staff is a supervisor
+  const supervisedDepartments = await this.prisma.department.count({
+    where: { supervisorId: staffId, deletedAt: null },
+  });
+  if (supervisedDepartments > 0) {
+    throw new HttpException('Cannot delete staff who supervises active departments', HttpStatus.BAD_REQUEST);
+  }
+
+  // Soft delete staff
+  return this.prisma.$transaction(async (prisma) => {
+    const deletedStaff = await prisma.user.update({
+      where: { id: staffId },
+      data: { deletedAt: new Date() },
+      select: { id: true, name: true, staffId: true, email: true, role: true },
+    });
+
+    // Create audit log
+    await prisma.auditLog.create({
+      data: {
+        submissionId: null,
+        action: 'STAFF_DELETED',
+        userId: requesterId,
+        details: `Admin (ID: ${requesterId}) deleted staff (ID: ${staffId}, Email: ${deletedStaff.email})`,
+        createdAt: new Date(),
+      },
+    });
+
+    // Notify deleted staff
+    await prisma.notification.create({
+      data: {
+        title: 'Account Deactivated',
+        description: `Your account has been deactivated by admin.`,
+        timestamp: new Date(),
+        iconType: 'USER',
+        role: deletedStaff.role,
+        userId: staffId,
+      },
+    });
+
+    // Notify ADMIN/STAFF
+    await prisma.notification.create({
+      data: {
+        title: 'Staff Account Deactivated',
+        description: `Staff (ID: ${staffId}, Email: ${deletedStaff.email}) account deactivated by Admin (ID: ${requesterId}).`,
+        timestamp: new Date(),
+        iconType: 'SETTING',
+        role: 'ADMIN',
+      },
+    });
+
+    return { message: `Staff (ID: ${staffId}) successfully deactivated` };
+    });
+  }
+
+  async deleteDepartment(departmentId: number, requesterId: number) {
+  // Verify requester is ADMIN
+  const requester = await this.prisma.user.findUnique({
+    where: { id: requesterId },
+    select: { role: true },
+  });
+  if (!requester || requester.role !== 'ADMIN') {
+    throw new HttpException('Only ADMIN can delete departments', HttpStatus.FORBIDDEN);
+  }
+
+  // Verify department exists
+  const department = await this.prisma.department.findUnique({
+    where: { id: departmentId },
+    select: { id: true, name: true, supervisorId: true, deletedAt: true },
+  });
+  if (!department || department.deletedAt) {
+    throw new HttpException('Department not found or already deleted', HttpStatus.NOT_FOUND);
+  }
+
+  // Check for active users or units
+  const activeUsers = await this.prisma.user.count({
+    where: { departmentId, deletedAt: null },
+  });
+  const activeUnits = await this.prisma.unit.count({
+    where: { departmentId, deletedAt: null },
+  });
+  if (activeUsers > 0 || activeUnits > 0) {
+    throw new HttpException('Cannot delete department with active users or units', HttpStatus.BAD_REQUEST);
+  }
+
+  // Soft delete department
+  return this.prisma.$transaction(async (prisma) => {
+    const deletedDepartment = await prisma.department.update({
+      where: { id: departmentId },
+      data: { deletedAt: new Date() },
+      select: { id: true, name: true, supervisorId: true },
+    });
+
+    // Create audit log
+    await prisma.auditLog.create({
+      data: {
+        submissionId: null,
+        action: 'DEPARTMENT_DELETED',
+        userId: requesterId,
+        details: `Admin (ID: ${requesterId}) soft-deleted department (ID: ${departmentId}, Name: ${deletedDepartment.name})`,
+        createdAt: new Date(),
+      },
+    });
+
+    // Notify supervisor (if exists)
+    if (deletedDepartment.supervisorId) {
+      await prisma.notification.create({
+        data: {
+          title: 'Department Deactivated',
+          description: `The department ${deletedDepartment.name} (ID: ${departmentId}) you supervised has been deactivated.`,
+          timestamp: new Date(),
+          iconType: 'USER',
+          role: 'STAFF',
+          userId: deletedDepartment.supervisorId,
+        },
+      });
+    }
+
+    // Notify ADMIN/STAFF
+    await prisma.notification.create({
+      data: {
+        title: 'Department Deactivated',
+        description: `Department (ID: ${departmentId}, Name: ${deletedDepartment.name}) deactivated by Admin (ID: ${requesterId}).`,
+        timestamp: new Date(),
+        iconType: 'SETTING',
+        role: 'ADMIN',
+      },
+    });
+
+    return { message: `Department (ID: ${departmentId}) successfully deactivated` };
+    });
+  }
+
+  async changePersonnelDepartment(dto: ChangePersonnelDepartmentDto, requesterId: number) {
+  // Verify requester is ADMIN
+  const requester = await this.prisma.user.findUnique({
+    where: { id: requesterId },
+    select: { role: true },
+  });
+ if (!requester || !['ADMIN', 'STAFF'].includes(requester.role)) {
+    throw new HttpException('Only ADMIN or STAFF can change personnel departments', HttpStatus.FORBIDDEN);
+  }
+
+  // Verify department exists
+  const department = await this.prisma.department.findUnique({
+    where: { id: dto.departmentId },
+    select: { id: true, name: true, deletedAt: true },
+  });
+  if (!department || department.deletedAt) {
+    throw new HttpException('Department not found or deleted', HttpStatus.NOT_FOUND);
+  }
+
+  // Verify users exist and are PERSONNEL
+  const users = await this.prisma.user.findMany({
+    where: {
+      id: { in: dto.userIds },
+      role: 'PERSONNEL',
+      deletedAt: null,
+    },
+    select: { id: true, name: true, nssNumber: true },
+  });
+  if (users.length !== dto.userIds.length) {
+    throw new HttpException('One or more users not found or not PERSONNEL', HttpStatus.NOT_FOUND);
+  }
+
+  // Update users and submissions
+  return this.prisma.$transaction(async (prisma) => {
+    // Update User.departmentId
+    await prisma.user.updateMany({
+      where: { id: { in: dto.userIds } },
+      data: { departmentId: dto.departmentId, updatedAt: new Date() },
+    });
+
+    // Create audit log
+    await prisma.auditLog.create({
+      data: {
+        submissionId: null,
+        action: 'PERSONNEL_DEPARTMENT_CHANGED',
+        userId: requesterId,
+        details: `Admin (ID: ${requesterId}) reassigned ${users.length} personnel to department (ID: ${dto.departmentId}, Name: ${department.name})`,
+        createdAt: new Date(),
+      },
+    });
+
+    // Notify each personnel
+    for (const user of users) {
+      await prisma.notification.create({
+        data: {
+          title: 'Department Assignment',
+          description: `You have been assigned to department ${department.name}.`,
+          timestamp: new Date(),
+          iconType: 'USER',
+          role: 'PERSONNEL',
+          userId: user.id,
+        },
+      });
+    }
+
+    // Notify ADMIN/STAFF
+    await prisma.notification.create({
+      data: {
+        title: 'Personnel Department Reassigned',
+        description: `${users.length} personnel reassigned to department ${department.name} (ID: ${dto.departmentId}) by Admin (ID: ${requesterId}).`,
+        timestamp: new Date(),
+        iconType: 'SETTING',
+        role: 'ADMIN',
+      },
+    });
+
+    return { message: `Successfully reassigned ${users.length} personnel to department ${department.name}`, departmentId: dto.departmentId };
+    });
   }
 }

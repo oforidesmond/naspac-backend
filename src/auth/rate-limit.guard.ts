@@ -1,4 +1,3 @@
-// src/guards/rate-limit.guard.ts
 import { Injectable, CanActivate, ExecutionContext, HttpException, HttpStatus, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { RateLimiterMemory, RateLimiterRedis } from 'rate-limiter-flexible';

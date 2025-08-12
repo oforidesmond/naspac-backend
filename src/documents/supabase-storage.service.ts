@@ -33,7 +33,7 @@ export class SupabaseStorageService {
     }
 
     if (isPrivate) {
-      return { fileName, bucket }; // Private files don’t need public URLs
+      return { fileName, bucket };
     }
 
     const { data: urlData } = this.supabase.storage
@@ -60,7 +60,6 @@ async getFile(fileName: string, bucket: string = 'killermike') {
         console.error('No data returned for file:', { fileName, bucket });
         throw new Error('No data returned from Supabase');
       }
-    // Convert Blob to Buffer
       const arrayBuffer = await data.arrayBuffer();
       return Buffer.from(arrayBuffer);
     } catch (err) {

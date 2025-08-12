@@ -11,8 +11,8 @@ model User {
   id                  Int           @id @default(autoincrement())
   name                String? 
   nssNumber           String?       @unique
-  signage             String?       // Stores path to admin's signature image
-  stamp               String?       // Stores path to admin's stamp image
+  signage             String?  
+  stamp               String?      
   stampHeight         Int?    
   stampWidth          Int?   
   sigHeight           Int?    
@@ -21,9 +21,9 @@ model User {
   email               String?       @unique
   password            String?
   role                Role          @default(PERSONNEL)
-  departmentId        Int?          // Optional: User can be assigned to a department
-  unitId             Int?          // Optional: User can be assigned to a unit
-  supervisorId        Int?          // Optional: Personnel can have a supervisor
+  departmentId        Int?    
+  unitId             Int?        
+  supervisorId        Int?        
   createdAt           DateTime      @default(now())
   updatedAt           DateTime      @updatedAt
   deletedAt           DateTime?
@@ -70,12 +70,12 @@ model Submission {
 
 model Template {
   id           Int       @id @default(autoincrement())
-  name         String    // e.g., "Job Confirmation Letter Template"
-  type         String    // e.g., "job_confirmation"
-  fileUrl      String    // Supabase URL to template file
+  name         String  
+  type         String   
+  fileUrl      String   
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
-  createdBy    Int       // Admin user ID
+  createdBy    Int     
   user         User      @relation("UserTemplates", fields: [createdBy], references: [id])
 }
 
@@ -94,7 +94,7 @@ model Department {
 model Unit {
   id                  Int           @id @default(autoincrement())
   name                String        @unique
-  departmentId        Int?          // Optional: Unit can exist without a department
+  departmentId        Int?      
   createdAt           DateTime      @default(now())
   updatedAt           DateTime      @updatedAt
   deletedAt           DateTime?
@@ -106,9 +106,9 @@ model Document {
   id                  Int           @id @default(autoincrement())
   submissionId        Int
   adminId             Int
-  originalUrl         String        // URL of the original PDF
-  signedUrl           String        // URL of the signed PDF
-  documentHash        String        // SHA-256 hash of the signed PDF
+  originalUrl         String     
+  signedUrl           String     
+  documentHash        String     
   signedAt            DateTime      @default(now())
   submission          Submission    @relation(fields: [submissionId], references: [id])
   admin               User          @relation("SignedDocuments", fields: [adminId], references: [id])
@@ -152,8 +152,8 @@ model Notification {
   description String
   timestamp   DateTime  @default(now())
   iconType    IconType
-  role        String    // Role: ADMIN, STAFF, PERSONNEL
-  userId      Int?      // Optional: Specific user ID for targeted notifications
+  role        String  
+  userId      Int?    
   user        User?     @relation(fields: [userId], references: [id])
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt

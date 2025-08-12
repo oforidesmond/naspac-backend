@@ -1,4 +1,4 @@
-import { Controller, Post, Body, UseGuards, HttpException, HttpStatus, Request, Get, Query, Res, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, HttpException, HttpStatus, Request, Get, Query, Res, UseInterceptors, UploadedFile, Param, ParseIntPipe } from '@nestjs/common';
 import { PrismaService } from 'prisma/prisma.service';
 import { JwtAuthGuard } from 'src/common/guards/auth-guard';
 import { RolesGuard } from 'src/common/guards/roles-guard';
@@ -36,7 +36,6 @@ export class DocumentsController {
       throw new HttpException('Submission not ready for endorsement', HttpStatus.BAD_REQUEST);
     }
 
-    // Get admin's signature/stamp paths
     const admin = await this.prisma.user.findUnique({
       where: { id: req.user.id },
     });
@@ -47,7 +46,6 @@ export class DocumentsController {
       );
     }
 
-    // Determine which document to sign
     const fileName =
       documentType === 'postingLetter'
          ? submission.postingLetterUrl.replace(
@@ -64,7 +62,7 @@ console.log('Raw URL:', submission.appointmentLetterUrl, 'Parsed fileName:', fil
       throw new HttpException(`No ${documentType} found for submission`, HttpStatus.BAD_REQUEST);
     }
 
-    // Sign the document
+    // Sign document
     const { signedUrl, documentId } = await this.documentsService.signDocument(
       submissionId,
       fileName,
@@ -87,7 +85,6 @@ console.log('Raw URL:', submission.appointmentLetterUrl, 'Parsed fileName:', fil
   async getSignedDocument(@Request() req, @Body() body: { submissionId: number }) {
     const { submissionId } = body;
 
-    // Validate submission
     const submission = await this.prisma.submission.findUnique({
       where: { id: submissionId },
       include: { user: true },
@@ -96,15 +93,13 @@ console.log('Raw URL:', submission.appointmentLetterUrl, 'Parsed fileName:', fil
       throw new HttpException('Submission not found', HttpStatus.NOT_FOUND);
     }
 
-    // Ensure user is the submission owner or an admin
     if (req.user.role !== 'ADMIN' && submission.userId !== req.user.id) {
       throw new HttpException('Unauthorized access to submission', HttpStatus.FORBIDDEN);
     }
 
-    // Find signed document
     const document = await this.prisma.document.findFirst({
       where: { submissionId },
-      orderBy: { signedAt: 'desc' }, // Get the most recent signed document
+      orderBy: { signedAt: 'desc' },
     });
     if (!document || !document.signedUrl) {
       throw new HttpException('No signed document found for this submission', HttpStatus.NOT_FOUND);
@@ -147,7 +142,7 @@ async downloadAppointmentLetter(
     }
     cb(null, true);
   },
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+  limits: { fileSize: 5 * 1024 * 1024 },
 }))
 async uploadTemplate(
   @Request() req,
@@ -163,4 +158,17 @@ async uploadTemplate(
   async getNotifications(@Request() req) {
     return this.documentsService.getNotifications(req.user.id, req.user.role);
   }
+
+  @Post('send-appointment-letter/:submissionId')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('ADMIN', 'STAFF')
+@UseInterceptors(FileInterceptor('file'))
+async sendAppointmentLetter(
+  @Request() req,
+  @Param('submissionId', ParseIntPipe) submissionId: number,
+  @UploadedFile() file: Express.Multer.File,
+  @Body() dto: { status: string },
+) {
+  return this.documentsService.sendAppointmentLetter(req.user.id, submissionId, file, dto);
+}
 }

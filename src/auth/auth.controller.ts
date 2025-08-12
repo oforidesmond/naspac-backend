@@ -37,7 +37,6 @@ export class AuthController {
   @Post('logout')
   @UseGuards(JwtAuthGuard)
   async logout() {
-    // Optional: Add server-side token invalidation (e.g., blacklist)
     return { success: true, message: 'Logged out successfully' };
   }
 

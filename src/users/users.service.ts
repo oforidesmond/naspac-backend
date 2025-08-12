@@ -24,7 +24,6 @@ export class UsersService {
   ) {}
 
   async getUserProfile(userId: number) {
-  // Fetch user profile
   const user = await this.prisma.user.findUnique({
     where: { id: userId },
     select: {
@@ -37,12 +36,10 @@ export class UsersService {
     },
   });
 
-  // Check if user exists and is not deleted
   if (!user || user.deletedAt) {
     throw new HttpException('User not found or deleted', HttpStatus.NOT_FOUND);
   }
 
-  // Return selected fields
   return {
     name: user.name || null,
     nssNumber: user.nssNumber || null,
@@ -106,13 +103,11 @@ async createUser(dto: CreateUserDto) {
   }
 
  async submitOnboarding(userId: number, dto: SubmitOnboardingDto, files: { postingLetter?: Express.Multer.File; appointmentLetter?: Express.Multer.File }) {
-    // Verify user is PERSONNEL and NSS number matches
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user || user.role !== 'PERSONNEL' || user.nssNumber !== dto.nssNumber) {
       throw new HttpException('Unauthorized or invalid NSS number', HttpStatus.FORBIDDEN);
     }
 
-    // Check for existing submission
     const existingSubmission = await this.prisma.submission.findUnique({
       where: { userId_nssNumber: { userId, nssNumber: dto.nssNumber } },
     });
@@ -120,7 +115,6 @@ async createUser(dto: CreateUserDto) {
       throw new HttpException('Submission already exists for this user', HttpStatus.BAD_REQUEST);
     }
 
-    // Validate files
     if (files.postingLetter && files.postingLetter.mimetype !== 'application/pdf') {
       throw new HttpException('Posting letter must be a PDF', HttpStatus.BAD_REQUEST);
     }
@@ -128,7 +122,6 @@ async createUser(dto: CreateUserDto) {
       throw new HttpException('Appointment letter must be a PDF', HttpStatus.BAD_REQUEST);
     }
 
-    // Upload files to Supabase Storage
     let postingLetterUrl = '';
     let appointmentLetterUrl = '';
 
@@ -170,15 +163,12 @@ async createUser(dto: CreateUserDto) {
       appointmentLetterUrl = urlData.publicUrl;
     }
 
-    // Convert yearOfNss string to number
     const yearOfNss = parseInt(dto.yearOfNss, 10);
     if (isNaN(yearOfNss) || yearOfNss < 1900 || yearOfNss > new Date().getFullYear()) {
       throw new HttpException('Invalid NSS year', HttpStatus.BAD_REQUEST);
     }
 
-     // Update User and create Submission in a transaction
   return this.prisma.$transaction(async (prisma) => {
-    // Update User with fullName and email from submission
     await prisma.user.update({
       where: { id: userId },
       data: {
@@ -188,7 +178,6 @@ async createUser(dto: CreateUserDto) {
       },
     });
 
-    // Create submission
     const submission = await prisma.submission.create({
       data: {
         userId,
@@ -209,7 +198,6 @@ async createUser(dto: CreateUserDto) {
       },
     });
 
-    // Create audit log entry
     await prisma.auditLog.create({
       data: {
         submissionId: submission.id,
@@ -231,7 +219,6 @@ async createUser(dto: CreateUserDto) {
       },
     });
 
-    // Create notification for ADMIN/STAFF
     await prisma.notification.create({
       data: {
         title: 'New Submission Received',
@@ -242,7 +229,6 @@ async createUser(dto: CreateUserDto) {
       },
     });
 
-     // Create notification for ADMIN/STAFF
     await prisma.notification.create({
       data: {
         title: 'New Submission Received',
@@ -263,7 +249,6 @@ async createUser(dto: CreateUserDto) {
   }
 
   async submitVerificationForm(userId: number, verificationForm: Express.Multer.File) {
-  // Verify user is PERSONNEL
   const user = await this.prisma.user.findUnique({
     where: { id: userId },
     select: { id: true, role: true, deletedAt: true, nssNumber: true },
@@ -275,7 +260,6 @@ async createUser(dto: CreateUserDto) {
     throw new HttpException('Only PERSONNEL can submit verification forms', HttpStatus.FORBIDDEN);
   }
 
-  // Fetch submission
   const submission = await this.prisma.submission.findUnique({
     where: { userId },
     select: { id: true, status: true, deletedAt: true, verificationFormUrl: true },
@@ -284,7 +268,6 @@ async createUser(dto: CreateUserDto) {
     throw new HttpException('Submission not found or deleted', HttpStatus.NOT_FOUND);
   }
 
-  // Validate submission status
   if (submission.status !== 'ENDORSED') {
     throw new HttpException(
       `Verification form can only be submitted when status is ENDORSED, current status: ${submission.status}`,
@@ -292,15 +275,12 @@ async createUser(dto: CreateUserDto) {
     );
   }
 
-  // Validate file
   if (!verificationForm || verificationForm.mimetype !== 'application/pdf') {
     throw new HttpException('Verification form must be a PDF', HttpStatus.BAD_REQUEST);
   }
 
-  // Initialize Supabase client
   const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 
-  // Upload verification form to Supabase
   const fileKey = `verification-forms/${userId}-${Date.now()}.pdf`;
   const { data, error } = await supabase.storage
     .from('killermike')
@@ -318,7 +298,6 @@ async createUser(dto: CreateUserDto) {
   }
   const verificationFormUrl = urlData.publicUrl;
 
-  // Update submission with verificationFormUrl in a transaction
   return this.prisma.$transaction(async (prisma) => {
     const updatedSubmission = await prisma.submission.update({
       where: { id: submission.id },
@@ -336,7 +315,6 @@ async createUser(dto: CreateUserDto) {
       },
     });
 
-    // Create audit log
     await prisma.auditLog.create({
       data: {
         submissionId: submission.id,
@@ -378,13 +356,11 @@ async createUser(dto: CreateUserDto) {
       },
     });
 
-     // Fetch all STAFF users to send emails
     const staffUsers = await prisma.user.findMany({
       where: { role: 'STAFF', deletedAt: null },
       select: { email: true, name: true },
     });
 
-    // Queue email for each STAFF user
     for (const staff of staffUsers) {
       await this.notificationsService.sendVerificationFormEmail(
         staff.email,
@@ -406,7 +382,6 @@ async createUser(dto: CreateUserDto) {
       );
       return response.data.map((uni: any) => ({
         name: uni.name,
-        // region: uni['state-province'] || 'Unknown',
       }));
     } catch (error) {
       console.error('Failed to fetch universities:', error.message);
@@ -443,6 +418,7 @@ async createUser(dto: CreateUserDto) {
         postingLetterUrl: true,
         appointmentLetterUrl: true,
         verificationFormUrl: true,
+        jobConfirmationLetterUrl: true,
         status: true,
         createdAt: true,
         updatedAt: true,
@@ -451,18 +427,16 @@ async createUser(dto: CreateUserDto) {
     });
   }
 
- async updateSubmissionStatus(
+async updateSubmissionStatus(
   userId: number,
   submissionId: number,
   dto: UpdateSubmissionStatusDto,
 ) {
-  // Verify user is ADMIN or STAFF
   const user = await this.prisma.user.findUnique({ where: { id: userId } });
   if (!user || !['ADMIN', 'STAFF'].includes(user.role)) {
     throw new HttpException('Unauthorized: Only ADMIN or STAFF can update submission status', HttpStatus.FORBIDDEN);
   }
 
-  // Verify submission exists
   const submission = await this.prisma.submission.findUnique({
     where: { id: submissionId },
     select: { id: true, userId: true, fullName: true, nssNumber: true, status: true, deletedAt: true, jobConfirmationLetterUrl: true },
@@ -471,14 +445,13 @@ async createUser(dto: CreateUserDto) {
     throw new HttpException('Submission not found', HttpStatus.NOT_FOUND);
   }
 
-  // Validate status transition (optional: add specific business rules for status changes)
   const validStatusTransitions = {
     PENDING: ['PENDING_ENDORSEMENT', 'REJECTED'],
     PENDING_ENDORSEMENT: ['ENDORSED', 'REJECTED'],
     ENDORSED: ['VALIDATED', 'REJECTED'],
     VALIDATED: ['COMPLETED', 'REJECTED'],
     REJECTED: ['PENDING'], // Allow resubmission
-    COMPLETED: [], // No further transitions
+    COMPLETED: [],
   };
 
   if (
@@ -493,12 +466,12 @@ async createUser(dto: CreateUserDto) {
 
   const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 
-  // Start a transaction to update submission and create audit log
   return this.prisma.$transaction(async (prisma) => {
-     let jobConfirmationLetterUrl = submission.jobConfirmationLetterUrl;
+    let jobConfirmationLetterUrl = submission.jobConfirmationLetterUrl;
 
-      if (dto.status === 'VALIDATED' && !jobConfirmationLetterUrl) {
-      // Fetch latest template
+    // Commented out the letter generation logic to disable it
+    /*
+    if (dto.status === 'VALIDATED' && !jobConfirmationLetterUrl) {
       const template = await prisma.template.findFirst({
         where: { type: 'job_confirmation' },
         orderBy: { createdAt: 'desc' },
@@ -508,7 +481,6 @@ async createUser(dto: CreateUserDto) {
         throw new HttpException('No job confirmation letter template found', HttpStatus.INTERNAL_SERVER_ERROR);
       }
 
-       // Download template from Supabase
       const fileKey = template.fileUrl.replace(`${process.env.SUPABASE_URL}/storage/v1/object/public/killermike/`, '');
       const { data: templateData, error: templateError } = await supabase.storage
         .from('killermike')
@@ -517,11 +489,9 @@ async createUser(dto: CreateUserDto) {
         throw new HttpException('Failed to retrieve template', HttpStatus.INTERNAL_SERVER_ERROR);
       }
 
-       // Load PDF template
       const templateBuffer = await templateData.arrayBuffer();
       const pdfDoc = await PDFDocument.load(templateBuffer);
   
-      // Fill form fields
       const form = pdfDoc.getForm();
       const nameField = form.getTextField('name');
       const dateField = form.getTextField('date');
@@ -531,10 +501,8 @@ async createUser(dto: CreateUserDto) {
       nameField.setText(submission.fullName);
       dateField.setText(moment().format('YYYY-MM-DD'));
 
-      // Flatten the form to embed text and remove field indicators
       form.flatten();
 
-  // Save modified PDF
       const pdfBytes = await pdfDoc.save();
       const fileKeyOutput = `job-confirmation-letters/${submissionId}-${Date.now()}.pdf`;
       const { error: uploadError } = await supabase.storage
@@ -552,8 +520,8 @@ async createUser(dto: CreateUserDto) {
       }
       jobConfirmationLetterUrl = urlData.publicUrl;
     }
+    */
 
-    // Update submission status
     const updatedSubmission = await prisma.submission.update({
       where: { id: submissionId },
       data: {
@@ -564,36 +532,29 @@ async createUser(dto: CreateUserDto) {
       select: { id: true, userId: true, fullName: true, nssNumber: true, status: true, jobConfirmationLetterUrl: true },
     });
 
-    // Create audit log entry
     await prisma.auditLog.create({
       data: {
         submissionId,
         action: `STATUS_CHANGED_TO_${dto.status}`,
         userId,
-        details: `${dto.comment || `Submission status changed to ${dto.status}`}${
-          dto.status === 'VALIDATED' && jobConfirmationLetterUrl ? ' and job confirmation letter generated' : ''
-        }`,
+        details: `${dto.comment || `Submission status changed to ${dto.status}`}`,
         createdAt: new Date(),
       },
     });
 
-    // Create notification for PERSONNEL
-    if (['ENDORSED','VALIDATED', 'COMPLETED'].includes(dto.status)) {
+    if (['ENDORSED', 'VALIDATED', 'COMPLETED'].includes(dto.status)) {
       await prisma.notification.create({
         data: {
           title: `Submission ${dto.status}`,
-          description: `Your submission has been ${dto.status.toLowerCase()}.${
-            dto.status === 'VALIDATED' ? ' Please download your job confirmation letter.' : ''
-          }`,
+          description: `Your submission has been ${dto.status.toLowerCase()}.`,
           timestamp: new Date(),
-          iconType: dto.status === 'VALIDATED' ? 'BELL' : 'USER',
+          iconType: 'USER',
           role: 'PERSONNEL',
           userId: updatedSubmission.userId,
         },
       });
     }
 
-    // Notify ADMIN/STAFF of status change
     await prisma.notification.create({
       data: {
         title: `Submission Status Updated`,
@@ -605,11 +566,10 @@ async createUser(dto: CreateUserDto) {
     });
 
     return updatedSubmission;
-    });
-  }
+  });
+}
 
   async getSubmissionStatusCounts(userId: number, dto: GetSubmissionStatusCountsDto) {
-  // Verify user is ADMIN or STAFF
   const user = await this.prisma.user.findUnique({ where: { id: userId } });
   if (!user || !['ADMIN', 'STAFF'].includes(user.role)) {
     throw new HttpException(
@@ -618,7 +578,6 @@ async createUser(dto: CreateUserDto) {
     );
   }
 
-  // Validate statuses array is not empty
   if (!dto.statuses || dto.statuses.length === 0) {
     throw new HttpException(
       'At least one status must be provided',
@@ -627,7 +586,6 @@ async createUser(dto: CreateUserDto) {
   }
   const currentYear = new Date().getFullYear();
   
-  // Fetch counts of submissions that have ever been in each status
   const counts = await Promise.all(
     dto.statuses.map(async (status) => {
       const submissionIds = await this.prisma.auditLog.findMany({
@@ -644,7 +602,7 @@ async createUser(dto: CreateUserDto) {
         select: {
           submissionId: true,
         },
-        distinct: ['submissionId'], // Ensure unique submission IDs
+        distinct: ['submissionId'],
       });
 
       return {
@@ -654,7 +612,6 @@ async createUser(dto: CreateUserDto) {
     })
   );
 
-    // Get total count of PERSONNEL submissions
   const totalCount = await this.prisma.submission.count({
     where: {
       deletedAt: null,
@@ -674,7 +631,6 @@ async createUser(dto: CreateUserDto) {
  }
 
  async getStaff(requesterId: number) {
-  // Verify requester is ADMIN or STAFF
   const requester = await this.prisma.user.findUnique({ where: { id: requesterId } });
   if (!requester || !['ADMIN', 'STAFF'].includes(requester.role)) {
     throw new HttpException(
@@ -683,13 +639,12 @@ async createUser(dto: CreateUserDto) {
     );
   }
 
-  // Fetch users with STAFF, ADMIN, or SUPERVISOR roles
   return this.prisma.user.findMany({
     where: {
       role: {
-        in: ['STAFF', 'ADMIN', 'SUPERVISOR'], // Filter by specified roles
+        in: ['STAFF', 'ADMIN', 'SUPERVISOR'],
       },
-      deletedAt: null, // Exclude soft-deleted users
+      deletedAt: null,
     },
     select: {
       id: true,
@@ -708,30 +663,26 @@ async createUser(dto: CreateUserDto) {
       createdAt: true,
       updatedAt: true,
     },
-    orderBy: { createdAt: 'desc' }, // Sort by most recent
+    orderBy: { createdAt: 'desc' },
   });
  }
 
  async createDepartment(requesterId: number, dto: CreateDepartmentDto) {
-  // Verify requester is ADMIN
   const requester = await this.prisma.user.findUnique({ where: { id: requesterId } });
   if (!requester || !['ADMIN', 'STAFF'].includes(requester.role)) {
     throw new HttpException('Unauthorized: Only admins and staff can create departments', HttpStatus.FORBIDDEN);
   }
 
-  // Validate supervisor
   const supervisor = await this.prisma.user.findUnique({ where: { id: dto.supervisorId } });
   if (!supervisor || supervisor.role !== 'SUPERVISOR' || supervisor.deletedAt) {
     throw new HttpException('Invalid or deleted supervisor', HttpStatus.BAD_REQUEST);
   }
 
-  // Validate department name uniqueness
   const existingDepartment = await this.prisma.department.findUnique({ where: { name: dto.name } });
   if (existingDepartment) {
     throw new HttpException('Department name already exists', HttpStatus.BAD_REQUEST);
   }
 
-  // Validate unitIds if provided
   if (dto.unitIds && dto.unitIds.length > 0) {
     const units = await this.prisma.unit.findMany({
       where: { id: { in: dto.unitIds }, deletedAt: null },
@@ -741,7 +692,6 @@ async createUser(dto: CreateUserDto) {
     }
   }
 
-  // Create department and assign units in a transaction
   return this.prisma.$transaction(async (prisma) => {
     const department = await prisma.department.create({
       data: {
@@ -761,13 +711,11 @@ async createUser(dto: CreateUserDto) {
       },
     });
 
-    // Assign units to department if provided
     if (dto.unitIds && dto.unitIds.length > 0) {
       await prisma.unit.updateMany({
         where: { id: { in: dto.unitIds } },
         data: { departmentId: department.id, updatedAt: new Date() },
       });
-      // Update department to include units in response
       department.units = await prisma.unit.findMany({
         where: { id: { in: dto.unitIds } },
         select: { id: true, name: true },
@@ -790,7 +738,6 @@ async createUser(dto: CreateUserDto) {
     throw new HttpException('Unauthorized: Only admins or staff can access departments', HttpStatus.FORBIDDEN);
   }
 
-  // Fetch departments
   return this.prisma.department.findMany({
     where: {
       deletedAt: null,
@@ -818,7 +765,6 @@ async createUser(dto: CreateUserDto) {
   }
   const currentYear = new Date().getFullYear();
 
-  // Fetch personnel with optional submission status filter
   return this.prisma.user.findMany({
     where: {
       role: 'PERSONNEL',
@@ -843,7 +789,7 @@ async createUser(dto: CreateUserDto) {
         select: {
           id: true,
           name: true,
-          supervisor: { // department's supervisor
+          supervisor: {
             select: {
               id: true,
               name: true,
@@ -887,7 +833,6 @@ async createUser(dto: CreateUserDto) {
   }
 
  async assignPersonnelToDepartment(requesterId: number, dto: AssignPersonnelToDepartmentDto) {
-  // Verify requester is ADMIN or STAFF
   const requester = await this.prisma.user.findUnique({ 
     where: { id: requesterId },
     select: { id: true, role: true },
@@ -899,7 +844,6 @@ async createUser(dto: CreateUserDto) {
     );
   }
 
-  // Verify department exists and is not deleted
   const department = await this.prisma.department.findUnique({
     where: { id: dto.departmentId },
     select: { id: true, name: true, deletedAt: true },
@@ -908,7 +852,6 @@ async createUser(dto: CreateUserDto) {
     throw new HttpException('Department not found or deleted', HttpStatus.NOT_FOUND);
   }
 
-  // Verify all submissionIds are valid, belong to PERSONNEL, and not deleted
   const submissions = await this.prisma.submission.findMany({
     where: {
       id: { in: dto.submissionIds },
@@ -933,12 +876,9 @@ async createUser(dto: CreateUserDto) {
     );
   }
 
-  // Extract userIds from submissions
   const userIds = submissions.map((sub) => sub.userId);
 
-  // Start a transaction to update users and create audit logs
   return this.prisma.$transaction(async (prisma) => {
-    // Update departmentId for all valid users
     await prisma.user.updateMany({
       where: {
         id: { in: userIds },
@@ -951,7 +891,6 @@ async createUser(dto: CreateUserDto) {
       },
     });
 
-    // Create audit log entries for each submission
     const auditLogs = submissions.map((sub) => ({
       submissionId: sub.id,
       action: 'PERSONNEL_ASSIGNED_TO_DEPARTMENT',
@@ -964,7 +903,6 @@ async createUser(dto: CreateUserDto) {
       data: auditLogs,
     });
 
-    // Return updated users with their new department and submission details
     const updatedUsers = await prisma.user.findMany({
       where: { id: { in: userIds } },
       select: {
@@ -988,11 +926,8 @@ async createUser(dto: CreateUserDto) {
     };
   });
   }
-
-  //report counts
   
   async getReportCounts(requesterId?: number) {
-  // Verify requester is ADMIN or STAFF
   if (requesterId) {
     const requester = await this.prisma.user.findUnique({
       where: { id: requesterId },
@@ -1009,7 +944,6 @@ async createUser(dto: CreateUserDto) {
   const currentYear = new Date().getFullYear();
   const nssNumberPattern = `%${currentYear}`;
 
-  // Run counts concurrently for performance
   const [
     totalPersonnel,
     totalNonPersonnel,
@@ -1020,17 +954,17 @@ async createUser(dto: CreateUserDto) {
     onboardedStudentCount,
     pendingCount,
   ] = await Promise.all([
-    // 1. Total personnel (role: PERSONNEL, not deleted)
+    // 1. Total personnel (not deleted)
     this.prisma.user.count({
       where: { role: 'PERSONNEL', deletedAt: null },
     }),
 
-    // 2. Total non-personnel (role not PERSONNEL, not deleted)
+    // 2. Total non-personnel
     this.prisma.user.count({
       where: { role: { not: 'PERSONNEL' }, deletedAt: null },
     }),
 
-    // 3. Total departments (not deleted)
+    // 3. Total departments
     this.prisma.department.count({
       where: { deletedAt: null },
     }),
@@ -1041,7 +975,6 @@ async createUser(dto: CreateUserDto) {
       where: { role: 'PERSONNEL', deletedAt: null, departmentId: { not: null } },
       _count: { id: true },
     }).then(async (groups) => {
-      // Fetch department names for non-null departmentIds
       const departmentIds = groups.map((g) => g.departmentId).filter((id) => id !== null);
       const departments = await this.prisma.department.findMany({
         where: { id: { in: departmentIds }, deletedAt: null },
@@ -1054,7 +987,7 @@ async createUser(dto: CreateUserDto) {
       }));
     }),
 
-    // 5. Combined count of accepted submissions (ENDORSED, VALIDATED, COMPLETED)
+    // 5. Combined count (ENDORSED, VALIDATED, COMPLETED)
     this.prisma.submission.count({
       where: {
         status: { in: ['ENDORSED', 'VALIDATED', 'COMPLETED'] },
@@ -1077,13 +1010,13 @@ async createUser(dto: CreateUserDto) {
             },
           },
           select: { submissionId: true },
-          distinct: ['submissionId'], // Ensure unique submission IDs
+          distinct: ['submissionId'],
         });
         return { status, count: submissionIds.length };
       })
     ),
 
-    // 7. Onboarded student count (PERSONNEL with used OnboardingToken)
+    // 7. Onboarded student count
     this.prisma.user.count({
       where: {
         role: 'PERSONNEL',
@@ -1109,13 +1042,12 @@ async createUser(dto: CreateUserDto) {
     }),
   ]);
 
-  // Map audit log counts to statusCounts object
   const statusCounts = {
     pending: auditLogCounts.find((c) => c.status === 'PENDING')?.count || 0,
     pendingEndorsement: auditLogCounts.find((c) => c.status === 'PENDING_ENDORSEMENT')?.count || 0,
-    endorsed: 0, // Will be part of acceptedCount
-    validated: 0, // Will be part of acceptedCount
-    completed: 0, // Will be part of acceptedCount
+    endorsed: 0,
+    validated: 0,
+    completed: 0,
     rejected: auditLogCounts.find((c) => c.status === 'REJECTED')?.count || 0,
   };
 
@@ -1131,9 +1063,7 @@ async createUser(dto: CreateUserDto) {
    };
   }
 
-  // Get personnel status for a specific user
   async getPersonnelStatus(userId: number) {
-  // Verify user is PERSONNEL
   const user = await this.prisma.user.findUnique({
     where: { id: userId },
     select: { id: true, role: true, deletedAt: true },
@@ -1145,13 +1075,11 @@ async createUser(dto: CreateUserDto) {
     throw new HttpException('Only PERSONNEL can access this endpoint', HttpStatus.FORBIDDEN);
   }
 
-  // Fetch submission for the user
   const submission = await this.prisma.submission.findUnique({
     where: { userId },
     select: { id: true, status: true, deletedAt: true },
   });
 
-  // Calculate completion percentage based on status
   const statusCompletionMap: Record<string, number> = {
     PENDING: 20,
     PENDING_ENDORSEMENT: 40,
@@ -1167,7 +1095,7 @@ async createUser(dto: CreateUserDto) {
   // Calculate service days (from October 1st to today)
   let serviceDays = 0;
   if (submission && !submission.deletedAt && submission.status === 'COMPLETED') {
-    const today = new Date(); // July 16, 2025
+    const today = new Date();
     const currentYear = today.getFullYear();
     // Determine the start of the current service year (October 1st)
     const serviceStartYear = today.getMonth() >= 9 ? currentYear + 1 : currentYear; // 9 = October
@@ -1175,7 +1103,7 @@ async createUser(dto: CreateUserDto) {
 
     // Calculate days difference
     const timeDiff = today.getTime() - serviceStart.getTime();
-    serviceDays = Math.floor(timeDiff / (1000 * 60 * 60 * 24)); // Convert ms to days
+    serviceDays = Math.floor(timeDiff / (1000 * 60 * 60 * 24));
     serviceDays = Math.max(0, serviceDays); // Ensure non-negative
   }
 
@@ -1187,7 +1115,6 @@ async createUser(dto: CreateUserDto) {
   }
 
   async updateStaff(staffId: number, dto: UpdateStaffDto, requesterId: number) {
-  // Verify requester is ADMIN
   const requester = await this.prisma.user.findUnique({
     where: { id: requesterId },
     select: { role: true },
@@ -1196,7 +1123,6 @@ async createUser(dto: CreateUserDto) {
     throw new HttpException('Only ADMIN can update staff information', HttpStatus.FORBIDDEN);
   }
 
-  // Verify staff user exists and is STAFF or ADMIN
   const staff = await this.prisma.user.findUnique({
     where: { id: staffId },
     select: { id: true, role: true, deletedAt: true },
@@ -1208,7 +1134,6 @@ async createUser(dto: CreateUserDto) {
     throw new HttpException('Can only update ADMIN or STAFF users', HttpStatus.BAD_REQUEST);
   }
 
-  // Update staff user
   return this.prisma.$transaction(async (prisma) => {
     const updatedStaff = await prisma.user.update({
       where: { id: staffId },
@@ -1222,7 +1147,6 @@ async createUser(dto: CreateUserDto) {
       select: { id: true, name: true, staffId: true, email: true, role: true },
     });
 
-    // Create audit log
     await prisma.auditLog.create({
       data: {
         submissionId: null,
@@ -1233,7 +1157,6 @@ async createUser(dto: CreateUserDto) {
       },
     });
 
-    // Notify updated staff user
     await prisma.notification.create({
       data: {
         title: 'Profile Updated',
@@ -1245,7 +1168,6 @@ async createUser(dto: CreateUserDto) {
       },
     });
 
-    // Notify ADMIN/STAFF
     await prisma.notification.create({
       data: {
         title: 'Staff Profile Updated',
@@ -1261,7 +1183,6 @@ async createUser(dto: CreateUserDto) {
 }
 
 async updateDepartment(departmentId: number, dto: UpdateDepartmentDto, requesterId: number) {
-  // Verify requester is ADMIN
   const requester = await this.prisma.user.findUnique({
     where: { id: requesterId },
     select: { role: true },
@@ -1270,7 +1191,6 @@ async updateDepartment(departmentId: number, dto: UpdateDepartmentDto, requester
     throw new HttpException('Only ADMIN can update department information', HttpStatus.FORBIDDEN);
   }
 
-  // Verify department exists
   const department = await this.prisma.department.findUnique({
     where: { id: departmentId },
     select: { id: true, name: true, supervisorId: true, deletedAt: true },
@@ -1279,7 +1199,6 @@ async updateDepartment(departmentId: number, dto: UpdateDepartmentDto, requester
     throw new HttpException('Department not found or deleted', HttpStatus.NOT_FOUND);
   }
 
-  // Verify supervisor (if provided)
   if (dto.supervisorId) {
     const supervisor = await this.prisma.user.findUnique({
       where: { id: dto.supervisorId },
@@ -1290,7 +1209,6 @@ async updateDepartment(departmentId: number, dto: UpdateDepartmentDto, requester
     }
   }
 
-  // Update department
   return this.prisma.$transaction(async (prisma) => {
     const updatedDepartment = await prisma.department.update({
       where: { id: departmentId },
@@ -1302,7 +1220,6 @@ async updateDepartment(departmentId: number, dto: UpdateDepartmentDto, requester
       select: { id: true, name: true, supervisorId: true },
     });
 
-    // Create audit log
     await prisma.auditLog.create({
       data: {
         submissionId: null,
@@ -1313,7 +1230,6 @@ async updateDepartment(departmentId: number, dto: UpdateDepartmentDto, requester
       },
     });
 
-    // Notify new supervisor (if changed)
     if (dto.supervisorId && dto.supervisorId !== department.supervisorId) {
       await prisma.notification.create({
         data: {
@@ -1327,7 +1243,6 @@ async updateDepartment(departmentId: number, dto: UpdateDepartmentDto, requester
       });
     }
 
-    // Notify ADMIN/STAFF
     await prisma.notification.create({
       data: {
         title: 'Department Updated',
@@ -1343,7 +1258,6 @@ async updateDepartment(departmentId: number, dto: UpdateDepartmentDto, requester
   }
 
   async deleteStaff(staffId: number, requesterId: number) {
-  // Verify requester is ADMIN
   const requester = await this.prisma.user.findUnique({
     where: { id: requesterId },
     select: { role: true },
@@ -1352,7 +1266,6 @@ async updateDepartment(departmentId: number, dto: UpdateDepartmentDto, requester
     throw new HttpException('Only ADMIN can delete staff', HttpStatus.FORBIDDEN);
   }
 
-  // Verify staff user exists and is STAFF or ADMIN
   const staff = await this.prisma.user.findUnique({
     where: { id: staffId },
     select: { id: true, role: true, email: true, name: true, staffId: true, deletedAt: true },
@@ -1367,7 +1280,6 @@ async updateDepartment(departmentId: number, dto: UpdateDepartmentDto, requester
     throw new HttpException('Cannot delete your own account', HttpStatus.BAD_REQUEST);
   }
 
-  // Check if staff is a supervisor
   const supervisedDepartments = await this.prisma.department.count({
     where: { supervisorId: staffId, deletedAt: null },
   });
@@ -1375,7 +1287,6 @@ async updateDepartment(departmentId: number, dto: UpdateDepartmentDto, requester
     throw new HttpException('Cannot delete staff who supervises active departments', HttpStatus.BAD_REQUEST);
   }
 
-  // Soft delete staff
   return this.prisma.$transaction(async (prisma) => {
     const deletedStaff = await prisma.user.update({
       where: { id: staffId },
@@ -1383,7 +1294,6 @@ async updateDepartment(departmentId: number, dto: UpdateDepartmentDto, requester
       select: { id: true, name: true, staffId: true, email: true, role: true },
     });
 
-    // Create audit log
     await prisma.auditLog.create({
       data: {
         submissionId: null,
@@ -1394,7 +1304,6 @@ async updateDepartment(departmentId: number, dto: UpdateDepartmentDto, requester
       },
     });
 
-    // Notify deleted staff
     await prisma.notification.create({
       data: {
         title: 'Account Deactivated',
@@ -1406,7 +1315,6 @@ async updateDepartment(departmentId: number, dto: UpdateDepartmentDto, requester
       },
     });
 
-    // Notify ADMIN/STAFF
     await prisma.notification.create({
       data: {
         title: 'Staff Account Deactivated',
@@ -1422,7 +1330,6 @@ async updateDepartment(departmentId: number, dto: UpdateDepartmentDto, requester
   }
 
   async deleteDepartment(departmentId: number, requesterId: number) {
-  // Verify requester is ADMIN
   const requester = await this.prisma.user.findUnique({
     where: { id: requesterId },
     select: { role: true },
@@ -1431,7 +1338,6 @@ async updateDepartment(departmentId: number, dto: UpdateDepartmentDto, requester
     throw new HttpException('Only ADMIN can delete departments', HttpStatus.FORBIDDEN);
   }
 
-  // Verify department exists
   const department = await this.prisma.department.findUnique({
     where: { id: departmentId },
     select: { id: true, name: true, supervisorId: true, deletedAt: true },
@@ -1440,7 +1346,6 @@ async updateDepartment(departmentId: number, dto: UpdateDepartmentDto, requester
     throw new HttpException('Department not found or already deleted', HttpStatus.NOT_FOUND);
   }
 
-  // Check for active users or units
   const activeUsers = await this.prisma.user.count({
     where: { departmentId, deletedAt: null },
   });
@@ -1451,7 +1356,6 @@ async updateDepartment(departmentId: number, dto: UpdateDepartmentDto, requester
     throw new HttpException('Cannot delete department with active users or units', HttpStatus.BAD_REQUEST);
   }
 
-  // Soft delete department
   return this.prisma.$transaction(async (prisma) => {
     const deletedDepartment = await prisma.department.update({
       where: { id: departmentId },
@@ -1459,7 +1363,6 @@ async updateDepartment(departmentId: number, dto: UpdateDepartmentDto, requester
       select: { id: true, name: true, supervisorId: true },
     });
 
-    // Create audit log
     await prisma.auditLog.create({
       data: {
         submissionId: null,
@@ -1470,7 +1373,6 @@ async updateDepartment(departmentId: number, dto: UpdateDepartmentDto, requester
       },
     });
 
-    // Notify supervisor (if exists)
     if (deletedDepartment.supervisorId) {
       await prisma.notification.create({
         data: {
@@ -1484,7 +1386,6 @@ async updateDepartment(departmentId: number, dto: UpdateDepartmentDto, requester
       });
     }
 
-    // Notify ADMIN/STAFF
     await prisma.notification.create({
       data: {
         title: 'Department Deactivated',
@@ -1500,7 +1401,6 @@ async updateDepartment(departmentId: number, dto: UpdateDepartmentDto, requester
   }
 
   async changePersonnelDepartment(dto: ChangePersonnelDepartmentDto, requesterId: number) {
-  // Verify requester is ADMIN
   const requester = await this.prisma.user.findUnique({
     where: { id: requesterId },
     select: { role: true },
@@ -1509,7 +1409,6 @@ async updateDepartment(departmentId: number, dto: UpdateDepartmentDto, requester
     throw new HttpException('Only ADMIN or STAFF can change personnel departments', HttpStatus.FORBIDDEN);
   }
 
-  // Verify department exists
   const department = await this.prisma.department.findUnique({
     where: { id: dto.departmentId },
     select: { id: true, name: true, deletedAt: true },
@@ -1518,7 +1417,6 @@ async updateDepartment(departmentId: number, dto: UpdateDepartmentDto, requester
     throw new HttpException('Department not found or deleted', HttpStatus.NOT_FOUND);
   }
 
-  // Verify users exist and are PERSONNEL
   const users = await this.prisma.user.findMany({
     where: {
       id: { in: dto.userIds },
@@ -1531,15 +1429,12 @@ async updateDepartment(departmentId: number, dto: UpdateDepartmentDto, requester
     throw new HttpException('One or more users not found or not PERSONNEL', HttpStatus.NOT_FOUND);
   }
 
-  // Update users and submissions
   return this.prisma.$transaction(async (prisma) => {
-    // Update User.departmentId
     await prisma.user.updateMany({
       where: { id: { in: dto.userIds } },
       data: { departmentId: dto.departmentId, updatedAt: new Date() },
     });
 
-    // Create audit log
     await prisma.auditLog.create({
       data: {
         submissionId: null,
@@ -1550,7 +1445,6 @@ async updateDepartment(departmentId: number, dto: UpdateDepartmentDto, requester
       },
     });
 
-    // Notify each personnel
     for (const user of users) {
       await prisma.notification.create({
         data: {
@@ -1564,7 +1458,6 @@ async updateDepartment(departmentId: number, dto: UpdateDepartmentDto, requester
       });
     }
 
-    // Notify ADMIN/STAFF
     await prisma.notification.create({
       data: {
         title: 'Personnel Department Reassigned',

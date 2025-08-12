@@ -34,7 +34,7 @@ export class InitUserDto {
   email: string;
 
   @IsString()
-  name: string; // Added name field
+  name: string;
 
   @IsEnum(Role, { message: 'Role must be STAFF, ADMIN, or SUPERVISOR' })
   role: 'STAFF' | 'ADMIN' | 'SUPERVISOR';

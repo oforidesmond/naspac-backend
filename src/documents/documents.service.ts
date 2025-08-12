@@ -23,7 +23,6 @@ export class DocumentsService {
     stampImagePath?: string,
   ) {
     try {
-      // Verify submission exists and is pending endorsement
       const submission = await this.prisma.submission.findUnique({
         where: { id: submissionId },
         include: { user: true },
@@ -32,7 +31,6 @@ export class DocumentsService {
         throw new Error('Submission not found or not ready for endorsement');
       }
 
-      // Load PDF from Supabase
       console.log('Fetching file from Supabase:', { fileName });
       const fileBuffer = await this.supabaseStorageService.getFile(fileName);
       console.log('PDF buffer size:', fileBuffer.length);
@@ -41,18 +39,15 @@ export class DocumentsService {
         throw new Error('Failed to retrieve file from Supabase');
       }
 
-      // Load PDF using pdf-lib
       const pdfDoc = await PDFDocument.load(fileBuffer);
 
-      // Ensure the PDF has at least 3 pages
       if (pdfDoc.getPageCount() < 3) {
         throw new Error('Appointment letter must have at least 3 pages');
       }
 
-      // Add visual signature/stamp to the third page if provided
       if (signatureImagePath && stampImagePath) {
         const verticalOffset = 40;
-        const page = pdfDoc.getPage(2); // Third page (index 2)
+        const page = pdfDoc.getPage(2);
         const { width, height } = page.getSize();
         const sigWidth = 100;
         const sigHeight = 50;
@@ -68,7 +63,6 @@ export class DocumentsService {
         const signatureImage = await pdfDoc.embedPng(signatureImageBuffer);
         const stampImage = await pdfDoc.embedPng(stampImageBuffer);
 
-        // Draw signature and stamp on the third page
         page.drawImage(signatureImage, {
          x: centerX,
         y: adjustedY,
@@ -82,7 +76,7 @@ export class DocumentsService {
         height: sigHeight,
         });
       } else {
-        // Fallback: Add text-based signature to the third page
+        // Fallback
         const page = pdfDoc.getPage(2);
         const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
         page.drawText(`Signed by Admin ID: ${adminId}`, {
@@ -94,20 +88,16 @@ export class DocumentsService {
         });
       }
 
-      // Save modified PDF as Buffer
       const modifiedPdfBuffer = Buffer.from(await pdfDoc.save());
 
-      // Generate SHA-256 hash of the modified PDF
       const documentHash = createHash('sha256').update(modifiedPdfBuffer).digest('hex');
 
-      // Upload modified PDF to Supabase Storage
       const signedFileName = `signed-${fileName}`;
       const signedUrl = await this.supabaseStorageService.uploadFile(
         modifiedPdfBuffer,
         signedFileName,
       );
 
-      // Update submission status and URLs
       const updatedSubmission = await this.prisma.submission.update({
         where: { id: submissionId },
         data: {
@@ -121,7 +111,6 @@ export class DocumentsService {
         },
       });
 
-      // Create document record with hash
       const document = await this.prisma.document.create({
         data: {
           submissionId,
@@ -133,7 +122,6 @@ export class DocumentsService {
         },
       });
 
-      // Log the signing action
       await this.prisma.auditLog.create({
         data: {
           submissionId,
@@ -143,7 +131,7 @@ export class DocumentsService {
         },
       });
 
-       // Create notification for PERSONNEL
+       // notification for PERSONNEL
       await this.prisma.notification.create({
         data: {
           title: 'Document Endorsed',
@@ -194,7 +182,6 @@ export class DocumentsService {
   }
 
   async downloadAppointmentLetter(userId: number, type: 'appointment' | 'endorsed' | 'job_confirmation') {
-  // Verify user is PERSONNEL
   const user = await this.prisma.user.findUnique({
     where: { id: userId },
     select: { id: true, role: true, deletedAt: true, nssNumber: true },
@@ -206,7 +193,6 @@ export class DocumentsService {
     throw new HttpException('Only PERSONNEL can access this endpoint', HttpStatus.FORBIDDEN);
   }
 
-  // Fetch submission with appointmentLetterUrl
   const submission = await this.prisma.submission.findUnique({
     where: { userId },
     select: { id: true, status: true, deletedAt: true, appointmentLetterUrl: true, jobConfirmationLetterUrl: true },
@@ -215,7 +201,6 @@ export class DocumentsService {
     throw new HttpException('Submission not found or deleted', HttpStatus.NOT_FOUND);
   }
 
-  // Validate status for file type
   const validStatuses = {
     appointment: ['VALIDATED', 'COMPLETED'],
     endorsed: ['ENDORSED'],
@@ -228,7 +213,6 @@ export class DocumentsService {
     );
   }
 
-  // Determine file URL based on type
   let fileUrl: string | null = null;
   if (type === 'appointment') {
     fileUrl = submission.appointmentLetterUrl;
@@ -250,13 +234,11 @@ export class DocumentsService {
     throw new HttpException(`No ${type} letter found for submission`, HttpStatus.NOT_FOUND);
   }
 
-  // Extract fileName from URL (remove Supabase base URL)
   const fileName = fileUrl.replace(`${process.env.SUPABASE_URL}/storage/v1/object/public/killermike/`, '');
   if (!fileName) {
     throw new HttpException('Invalid file URL', HttpStatus.BAD_REQUEST);
   }
 
-  // Download file from Supabase
   try {
      const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
     const { data, error } = await supabase.storage.from('killermike').download(fileName);
@@ -264,14 +246,12 @@ export class DocumentsService {
       throw new HttpException(`Failed to retrieve ${type} letter`, HttpStatus.NOT_FOUND);
     }
 
-    // Convert Buffer to stream
      const arrayBuffer = await data.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
     const stream = new Readable();
     stream.push(buffer);
     stream.push(null);
 
-     // Update status to COMPLETED for job_confirmation download if VALIDATED
     await this.prisma.$transaction(async (prisma) => {
       if (type === 'job_confirmation' && submission.status === 'VALIDATED') {
         await prisma.submission.update({
@@ -282,7 +262,6 @@ export class DocumentsService {
           },
         });
 
-        // Log status change
         await prisma.auditLog.create({
           data: {
             submissionId: submission.id,
@@ -293,7 +272,6 @@ export class DocumentsService {
           },
         });
 
-         // Create notification for PERSONNEL
           await prisma.notification.create({
             data: {
               title: 'Onboarding Completed',
@@ -306,7 +284,6 @@ export class DocumentsService {
           });
       }
 
-      // Log download action
       await prisma.auditLog.create({
         data: {
           submissionId: submission.id,
@@ -325,9 +302,8 @@ export class DocumentsService {
   }
 }
 
-  //upload template
+  //upload letter template
   async uploadTemplate(userId: number, template: Express.Multer.File, name: string) {
-  // Verify user is ADMIN
   const user = await this.prisma.user.findUnique({
     where: { id: userId },
     select: { id: true, role: true },
@@ -336,15 +312,12 @@ export class DocumentsService {
     throw new HttpException('Only ADMIN can upload templates', HttpStatus.FORBIDDEN);
   }
 
-  // Validate file
   if (!template || !['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'].includes(template.mimetype)) {
     throw new HttpException('Template must be a PDF or Word file', HttpStatus.BAD_REQUEST);
   }
 
-  // Initialize Supabase client
   const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 
-  // Upload template to Supabase
   const fileExtension = template.mimetype === 'application/pdf' ? 'pdf' : 'docx';
   const fileKey = `templates/job-confirmation-${userId}-${Date.now()}.${fileExtension}`;
   const { error } = await supabase.storage
@@ -362,7 +335,6 @@ export class DocumentsService {
     throw new HttpException('Failed to get public URL for template', HttpStatus.INTERNAL_SERVER_ERROR);
   }
 
-  // Store template metadata in database
   const templateRecord = await this.prisma.template.create({
     data: {
       name: name || 'Job Confirmation Letter Template',
@@ -374,7 +346,6 @@ export class DocumentsService {
     },
   });
 
-  // Create audit log
   await this.prisma.auditLog.create({
     data: {
       submissionId: null,
@@ -401,7 +372,6 @@ export class DocumentsService {
   }
 
   async getNotifications(userId: number, role: string, skip = 0, take = 10) {
-    // Verify user exists
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { id: true, role: true, deletedAt: true },
@@ -410,11 +380,10 @@ export class DocumentsService {
       throw new HttpException('User not found or deleted', HttpStatus.NOT_FOUND);
     }
 
-    // Fetch notifications for the user's role or specific user
     const notifications = await this.prisma.notification.findMany({
     where: {
       OR: [
-        { role, userId: role === 'PERSONNEL' ? userId : undefined }, // Role-specific for non-personnel, user-specific for personnel
+        { role, userId: role === 'PERSONNEL' ? userId : undefined },
         { userId, role }, // User-specific notifications
       ],
     },
@@ -433,4 +402,101 @@ export class DocumentsService {
 
     return notifications;
   }
+
+  async sendAppointmentLetter(userId: number, submissionId: number, file: Express.Multer.File, dto: { status: string }) {
+  const user = await this.prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, role: true, name: true },
+  });
+  if (!user || !['ADMIN', 'STAFF'].includes(user.role)) {
+    throw new HttpException('Unauthorized: Only ADMIN or STAFF can send appointment letters', HttpStatus.FORBIDDEN);
+  }
+
+  const submission = await this.prisma.submission.findUnique({
+    where: { id: submissionId },
+    select: { id: true, userId: true, fullName: true, nssNumber: true, status: true, deletedAt: true, jobConfirmationLetterUrl: true },
+  });
+  if (!submission || submission.deletedAt) {
+    throw new HttpException('Submission not found or deleted', HttpStatus.NOT_FOUND);
+  }
+
+  if (!['ENDORSED', 'VALIDATED'].includes(submission.status)) {
+    throw new HttpException(
+      `Cannot send appointment letter for submission with status: ${submission.status}`,
+      HttpStatus.BAD_REQUEST,
+    );
+  }
+
+  if (!file || file.mimetype !== 'application/pdf') {
+    throw new HttpException('A valid PDF file is required', HttpStatus.BAD_REQUEST);
+  }
+
+  const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
+  const fileKey = `job-confirmation-letters/${submissionId}-${Date.now()}.pdf`;
+
+  return this.prisma.$transaction(async (prisma) => {
+    // Upload PDF to Supabase
+    const { error: uploadError } = await supabase.storage
+      .from('killermike')
+      .upload(fileKey, file.buffer, {
+        contentType: 'application/pdf',
+        cacheControl: '3600',
+      });
+    if (uploadError) {
+      throw new HttpException(`Failed to upload appointment letter: ${uploadError.message}`, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+
+    const { data: urlData } = supabase.storage.from('killermike').getPublicUrl(fileKey);
+    if (!urlData || !urlData.publicUrl) {
+      throw new HttpException('Failed to get public URL for appointment letter', HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+
+    // Update submission with jobConfirmationLetterUrl and status
+    const updatedSubmission = await prisma.submission.update({
+      where: { id: submissionId },
+      data: {
+        status: 'COMPLETED',
+        jobConfirmationLetterUrl: urlData.publicUrl,
+        updatedAt: new Date(),
+      },
+      select: { id: true, userId: true, fullName: true, nssNumber: true, status: true, jobConfirmationLetterUrl: true },
+    });
+
+    // Create audit log
+    await prisma.auditLog.create({
+      data: {
+        submissionId,
+        action: `APPOINTMENT_LETTER_SENT`,
+        userId,
+        details: `Appointment letter sent for submission (ID: ${submissionId}, NSS: ${submission.nssNumber}) by ${user.name}`,
+        createdAt: new Date(),
+      },
+    });
+
+    // Notify personnel
+    await prisma.notification.create({
+      data: {
+        title: 'Appointment Letter Sent',
+        description: 'Your COCOBOD Appointment Letter is available for download in your dashboard.',
+        timestamp: new Date(),
+        iconType: 'BELL',
+        role: 'PERSONNEL',
+        userId: updatedSubmission.userId,
+      },
+    });
+
+    // Notify admin/staff
+    await prisma.notification.create({
+      data: {
+        title: 'Appointment Letter Sent',
+        description: `Appointment letter sent for submission (ID: ${submissionId}, NSS: ${submission.nssNumber}) by ${user.name}.`,
+        timestamp: new Date(),
+        iconType: 'SETTING',
+        role: user.role === 'ADMIN' ? 'ADMIN' : 'STAFF',
+      },
+    });
+
+    return updatedSubmission;
+  });
+}
 }

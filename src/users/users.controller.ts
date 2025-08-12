@@ -32,7 +32,6 @@ async getUserProfile(@Request() req) {
     return this.usersService.createUser(createUserDto);
   }
 
-  //upload signature and stamp
   @Post('upload-signage')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
@@ -53,7 +52,6 @@ async getUserProfile(@Request() req) {
   ) {
     const adminId = req.user.id;
 
-    // Validate files
     const signatureFile = files.find((f) => f.originalname.includes('signature'));
     const stampFile = files.find((f) => f.originalname.includes('stamp'));
     if (!signatureFile || !stampFile) {
@@ -63,7 +61,6 @@ async getUserProfile(@Request() req) {
       );
     }
 
-    // Upload signature to Supabase
     const signatureFileName = `signatures/admin-${adminId}-signature-${Date.now()}.png`;
     const signatureUrl = await this.supabaseStorageService.uploadFile(
       signatureFile.buffer,
@@ -71,7 +68,6 @@ async getUserProfile(@Request() req) {
       'killermike',
     );
 
-    // Upload stamp to Supabase
     const stampFileName = `stamps/admin-${adminId}-stamp-${Date.now()}.png`;
     const stampUrl = await this.supabaseStorageService.uploadFile(
       stampFile.buffer,
@@ -79,13 +75,12 @@ async getUserProfile(@Request() req) {
       'killermike',
     );
 
-    // Update admin's User record with file paths and default dimensions
     await this.prisma.user.update({
       where: { id: adminId },
       data: {
         signage: signatureFileName,
         stamp: stampFileName,
-        sigWidth: 100, // Adjust based on your requirements
+        sigWidth: 100,
         sigHeight: 50,
         stampWidth: 100,
         stampHeight: 50,
@@ -99,7 +94,6 @@ async getUserProfile(@Request() req) {
     };
   }
 
-  //submit onboarding
  @Post('submit-onboarding')
   @UseGuards(JwtAuthGuard, RolesGuard, RateLimitGuard)
   @Roles('PERSONNEL')
@@ -110,14 +104,13 @@ async getUserProfile(@Request() req) {
       }
       cb(null, true);
     },
-    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+    limits: { fileSize: 5 * 1024 * 1024 },
   }))
   async submitOnboarding(
     @Request() req,
     @Body() dto: SubmitOnboardingDto,
     @UploadedFiles() files: Express.Multer.File[],
   ) {
-    // Map files to the expected structure
     const fileMap = {
       postingLetter: files.find((f) => f.originalname.includes('postingLetter')),
       appointmentLetter: files.find((f) => f.originalname.includes('appointmentLetter')),
@@ -131,7 +124,6 @@ async getUserProfile(@Request() req) {
     return this.usersService.getGhanaUniversities();
   }
 
-  //get submissions
     @Get('submissions')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('STAFF', 'ADMIN')
@@ -139,7 +131,6 @@ async getUserProfile(@Request() req) {
     return this.usersService.getAllSubmissions();
   }
 
-  //check for submission status
     @Get('onboarding-status')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('PERSONNEL')
@@ -162,7 +153,6 @@ async getUserProfile(@Request() req) {
         );
   }
 
-  //check submission status
   @Post('submission-status-counts')
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles('ADMIN', 'STAFF')
@@ -214,7 +204,6 @@ async assignPersonnelToDepartment(
   return this.usersService.assignPersonnelToDepartment(req.user.id, dto);
   }
 
-  //report counts
   @Get('reports-counts')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('ADMIN', 'STAFF')
@@ -239,7 +228,7 @@ async getPersonnelStatus(@Request() req) {
     }
     cb(null, true);
   },
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+  limits: { fileSize: 5 * 1024 * 1024 },
 }))
 async submitVerificationForm(
   @Request() req,

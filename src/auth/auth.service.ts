@@ -17,13 +17,12 @@ export class AuthService {
 
   // Validate STAFF or ADMIN user
   async validateStaffAdmin(staffId: string, password: string): Promise<any> {
-    const user = await this.usersService.findByStaffId(staffId); // Specific method for staffId
+    const user = await this.usersService.findByStaffId(staffId);
 
     if (!user) {
       throw new HttpException('Invalid staff ID or password', HttpStatus.UNAUTHORIZED);
     }
 
-    // Restrict to STAFF or ADMIN roles
     if (user.role !== 'STAFF' && user.role !== 'ADMIN' && user.role !== 'SUPERVISOR') {
       throw new HttpException(
         'Access denied. Only Staff or Admin roles are allowed.',
@@ -39,11 +38,10 @@ export class AuthService {
     return { id: user.id, staffId: user.staffId, role: user.role, email: user.email , name: user.name};
   }
 
-  // Validate PERSONNEL user
  async validatePersonnel(nssNumber: string, password: string): Promise<any> {
   let user = await this.usersService.findByNssNumber(nssNumber);
 
-  // If not found, try with current year appended
+  // try with current year appended
   if (!user) {
     const currentYear = new Date().getFullYear();
     const nssNumberWithYear = `${nssNumber}${currentYear}`;
@@ -54,7 +52,6 @@ export class AuthService {
     throw new HttpException('Invalid NSS number or password', HttpStatus.UNAUTHORIZED);
   }
 
-  // Restrict to PERSONNEL role
   if (user.role !== 'PERSONNEL') {
     throw new HttpException(
       'Access denied. Only Personnel role is allowed.',
@@ -62,7 +59,6 @@ export class AuthService {
     );
   }
 
-  // Validate password
   const isPasswordValid = await bcrypt.compare(password, user.password);
   if (!isPasswordValid) {
     throw new HttpException('Invalid NSS number or password', HttpStatus.UNAUTHORIZED);
@@ -70,8 +66,8 @@ export class AuthService {
 
   return { id: user.id, nssNumber: user.nssNumber, role: user.role, email: user.email, name: user.name };
 }
-  // Login for STAFF or ADMIN
-  async loginStaffAdmin(staffId: string, password: string) {
+
+async loginStaffAdmin(staffId: string, password: string) {
     const user = await this.validateStaffAdmin(staffId, password);
     const payload = { sub: user.id, identifier: user.staffId, role: user.role, name: user.name, email: user.email };
     return {
@@ -80,7 +76,6 @@ export class AuthService {
     };
   }
 
-  // Login for PERSONNEL
   async loginPersonnel(nssNumber: string, password: string) {
     const user = await this.validatePersonnel(nssNumber, password);
     const payload = { sub: user.id, identifier: user.nssNumber, role: user.role, name: user.name, email: user.email || ''};
@@ -90,12 +85,10 @@ export class AuthService {
   }
 
   async validateToken(user: any) {
-    // User is already validated by JwtAuthGuard
     return { success: true, userId: user.id, role: user.role, email: user.email, name: user.name };
   }
 
  async initOnboarding(nssNumber: string, email: string, initiatedBy: { id: number; role: string }) {
-    // Restrict to STAFF or ADMIN roles
     if (!['STAFF', 'ADMIN'].includes(initiatedBy.role)) {
       throw new HttpException('Unauthorized: Only staff or admins can initiate onboarding', HttpStatus.FORBIDDEN);
     }
@@ -103,13 +96,11 @@ export class AuthService {
      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     throw new HttpException('Invalid email address', HttpStatus.BAD_REQUEST);
   }
-    // Check if NSS number already exists
     const existingUser = await this.usersService.findByNssNumberOrStaffId(nssNumber);
     if (existingUser) {
       throw new HttpException('NSS number already registered', HttpStatus.BAD_REQUEST);
     }
 
-    // Create new user without password
     const currentYear = new Date().getFullYear();
     const nssNumberWithYear = `${nssNumber}${currentYear}`;
 
@@ -119,7 +110,6 @@ export class AuthService {
       role: 'PERSONNEL',
     });
 
-    // Generate onboarding token
     const token = crypto.randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + 1 * 60 * 60 * 1000); // 1 hour expiry
 
@@ -132,7 +122,6 @@ export class AuthService {
       },
     });
 
-    // Queue onboarding email
     await this.notificationsService.sendOnboardingEmail(email, nssNumberWithYear, token);
 
     return { message: 'Onboarding link sent to email', email };
@@ -157,15 +146,12 @@ export class AuthService {
       throw new HttpException('Invalid or expired token', HttpStatus.BAD_REQUEST);
     }
 
-    // Check if user already has a password
     if (onboardingToken.user.password) {
       throw new HttpException('Password already set for this account', HttpStatus.BAD_REQUEST);
     }
 
-    // Update user password
     await this.usersService.updateUser(onboardingToken.userId, { password });
 
-    // Mark token as used
     await this.prisma.onboardingToken.update({
       where: { token },
       data: { used: true },
@@ -180,11 +166,9 @@ export class AuthService {
       return { message: 'If an account exists, a reset link will be sent' };
     }
 
-    // Generate reset token
     const token = crypto.randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + 1 * 60 * 60 * 1000); // 1 hour expiry
 
-    // Store token
     await this.prisma.passwordResetToken.create({
       data: {
         token,
@@ -193,7 +177,6 @@ export class AuthService {
       },
     });
 
-    // Queue reset email
     await this.notificationsService.sendForgotPasswordEmail(email, token);
 
     return { message: 'If an account exists, a reset link will be sent' };
@@ -209,27 +192,23 @@ export class AuthService {
       throw new HttpException('Invalid or expired token', HttpStatus.BAD_REQUEST);
     }
 
-    // Update user password
     await this.usersService.updateUser(resetToken.userId, { password });
 
-    // Delete used token
     await this.prisma.passwordResetToken.delete({ where: { token } });
 
     return { message: 'Password reset successfully' };
   }
 
   async initUser(staffId: string, email: string, name: string, role: 'STAFF' | 'ADMIN' | 'SUPERVISOR', initiatedBy: { id: number; role: string }) {
-  // Restrict to ADMIN role
+
   if (initiatedBy.role !== 'ADMIN') {
     throw new HttpException('Unauthorized: Only admins can initiate user creation', HttpStatus.FORBIDDEN);
   }
 
-  // Validate email
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     throw new HttpException('Invalid email address', HttpStatus.BAD_REQUEST);
   }
 
-  // Check if staffId or email already exists
   const existingUser = await this.usersService.findByNssNumberOrStaffId(staffId);
   if (existingUser) {
     throw new HttpException('Staff ID already registered', HttpStatus.BAD_REQUEST);
@@ -239,12 +218,10 @@ export class AuthService {
     throw new HttpException('Email already registered', HttpStatus.BAD_REQUEST);
   }
 
-  // Validate role
   if (!['STAFF', 'ADMIN', 'SUPERVISOR'].includes(role)) {
     throw new HttpException('Invalid role: Must be STAFF, ADMIN, or SUPERVISOR', HttpStatus.BAD_REQUEST);
   }
 
-  // Create new user without password
   const user = await this.usersService.createUser({
    staffId,
     email,
@@ -252,20 +229,18 @@ export class AuthService {
     role,
   });
 
-  // Generate onboarding token
   const token = crypto.randomBytes(32).toString('hex');
-  const expiresAt = new Date(Date.now() + 1 * 60 * 60 * 1000); // 1 hour expiry
+  const expiresAt = new Date(Date.now() + 1 * 60 * 60 * 1000);
 
   await this.prisma.onboardingToken.create({
     data: {
       token,
-      nssNumber: staffId, // Using staffId as identifier in token for non-PERSONNEL
+      nssNumber: staffId,
       userId: user.id,
       expiresAt,
     },
   });
 
-  // Queue onboarding email
   await this.notificationsService.sendOnboardingEmail(email, staffId, token);
 
   return { message: 'Onboarding link sent to email', email };

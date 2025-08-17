@@ -23,10 +23,10 @@ export class DocumentsService {
     stampImagePath?: string,
   ) {
     try {
-      const submission = await this.prisma.submission.findUnique({
-        where: { id: submissionId },
-        include: { user: true },
-      });
+    const submission = await this.prisma.submission.findUnique({
+      where: { id: submissionId },
+      select: { id: true, status: true, userId: true, user: { select: { nssNumber: true, email: true, name: true } }, appointmentLetterUrl: true, postingLetterUrl: true, createdAt: true },
+    });
       if (!submission || submission.status !== 'PENDING_ENDORSEMENT') {
         throw new Error('Submission not found or not ready for endorsement');
       }
@@ -41,52 +41,117 @@ export class DocumentsService {
 
       const pdfDoc = await PDFDocument.load(fileBuffer);
 
-      if (pdfDoc.getPageCount() < 3) {
-        throw new Error('Appointment letter must have at least 3 pages');
-      }
+    if (pdfDoc.getPageCount() < 4) {
+      throw new Error('Appointment letter must have at least 4 pages');
+    }
+
+    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+
+    const page = pdfDoc.getPage(2); // Third page
+  
+    const thirdPage = pdfDoc.getPage(2);
+    const { width, height } = thirdPage.getSize();
+    const sigWidth = 100;
+    const sigHeight = 50;
+    const centerX = (width - sigWidth) / 2;
+    const centerY = height / 2;
+    const verticalOffset = 40;
+    const adjustedY = centerY - verticalOffset;
+      
+      // Add submission date
+      const submissionDate = new Date(submission.createdAt).toLocaleDateString('en-US', {
+        month: '2-digit',
+        day: '2-digit',
+        year: '2-digit',
+      });
+      thirdPage.drawText(`${submissionDate}`, {
+        x: centerX,
+        y: adjustedY + 135,
+        size: 12,
+        font,
+        color: rgb(0, 0, 0),
+      });
 
       if (signatureImagePath && stampImagePath) {
-        const verticalOffset = 40;
-        const page = pdfDoc.getPage(2);
-        const { width, height } = page.getSize();
-        const sigWidth = 100;
-        const sigHeight = 50;
-        const centerX = (width - sigWidth) / 2;
-        const centerY = height / 2;
-        const adjustedY = centerY - verticalOffset;
-        const signatureImageBuffer = await this.supabaseStorageService.getFile(signatureImagePath, 'killermike');
-        const stampImageBuffer = await this.supabaseStorageService.getFile(stampImagePath, 'killermike');
+      const signatureImageBuffer = await this.supabaseStorageService.getFile(signatureImagePath, 'killermike');
+      const stampImageBuffer = await this.supabaseStorageService.getFile(stampImagePath, 'killermike');
 
-        console.log('Signature buffer size:', signatureImageBuffer.length);
-        console.log('Stamp buffer size:', stampImageBuffer.length);
+      console.log('Signature buffer size:', signatureImageBuffer.length);
+      console.log('Stamp buffer size:', stampImageBuffer.length);
 
-        const signatureImage = await pdfDoc.embedPng(signatureImageBuffer);
-        const stampImage = await pdfDoc.embedPng(stampImageBuffer);
+      const signatureImage = await pdfDoc.embedPng(signatureImageBuffer);
+      const stampImage = await pdfDoc.embedPng(stampImageBuffer);
 
-        page.drawImage(signatureImage, {
-         x: centerX,
+      thirdPage.drawImage(signatureImage, {
+        x: centerX,
         y: adjustedY,
         width: sigWidth,
         height: sigHeight,
-        });
-        page.drawImage(stampImage, {
-         x: centerX,
+      });
+      thirdPage.drawImage(stampImage, {
+        x: centerX,
         y: adjustedY,
         width: sigWidth,
         height: sigHeight,
-        });
-      } else {
-        // Fallback
-        const page = pdfDoc.getPage(2);
-        const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-        page.drawText(`Signed by Admin ID: ${adminId}`, {
-          x: 54,
-          y: 53,
-          size: 12,
-          font,
-          color: rgb(0, 0, 0),
-        });
-      }
+      });
+    } else {
+      // Fallback
+      thirdPage.drawText(`${submissionDate}`, {
+        x: 54,
+        y: 190,
+        size: 12,
+        font,
+        color: rgb(0, 0, 0),
+      });
+      thirdPage.drawText(`Signed by Admin ID: ${adminId}`, {
+        x: 54,
+        y: 53,
+        size: 12,
+        font,
+        color: rgb(0, 0, 0),
+      });
+    }
+
+     // Fourth page
+    const fourthPage = pdfDoc.getPage(3);
+    const emailText = 'cocobod@cocobod.gh';
+    const phone1Text = '0302 - 661 - 752';
+    const phone2Text = '0302 - 661 - 872';
+    const headerText = 'GHANA COCOA BOARD';
+
+     const baseY = adjustedY + 75.83;
+
+     fourthPage.drawText(emailText, {
+      x: centerX,
+      y: baseY,
+      size: 12,
+      font,
+      color: rgb(0, 0, 0),
+    });
+
+    fourthPage.drawText(phone1Text, {
+      x: centerX,
+      y: baseY - 14.17,
+      size: 12,
+      font,
+      color: rgb(0, 0, 0),
+    });
+
+    fourthPage.drawText(phone2Text, {
+      x: centerX,
+      y: baseY - 28.34,
+      size: 12,
+      font,
+      color: rgb(0, 0, 0),
+    });
+
+    fourthPage.drawText(headerText, {
+      x: centerX,
+      y: baseY + 58.85,
+      size: 12,
+      font,
+      color: rgb(0, 0, 0),
+    });
 
       const modifiedPdfBuffer = Buffer.from(await pdfDoc.save());
 

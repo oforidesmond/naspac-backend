@@ -439,7 +439,7 @@ async updateSubmissionStatus(
 
   const submission = await this.prisma.submission.findUnique({
     where: { id: submissionId },
-    select: { id: true, userId: true, fullName: true, nssNumber: true, status: true, deletedAt: true, jobConfirmationLetterUrl: true },
+    select: { id: true, userId: true, fullName: true, nssNumber: true, email: true, status: true, deletedAt: true, jobConfirmationLetterUrl: true },
   });
   if (!submission || submission.deletedAt) {
     throw new HttpException('Submission not found', HttpStatus.NOT_FOUND);
@@ -529,7 +529,7 @@ async updateSubmissionStatus(
         jobConfirmationLetterUrl,
         updatedAt: new Date(),
       },
-      select: { id: true, userId: true, fullName: true, nssNumber: true, status: true, jobConfirmationLetterUrl: true },
+      select: { id: true, userId: true, fullName: true, nssNumber: true, email: true, status: true, jobConfirmationLetterUrl: true },
     });
 
     await prisma.auditLog.create({
@@ -553,6 +553,15 @@ async updateSubmissionStatus(
           userId: updatedSubmission.userId,
         },
       });
+    }
+
+     if (dto.status === 'REJECTED') {
+      await this.notificationsService.sendRejectionEmail(
+        updatedSubmission.email,
+        updatedSubmission.fullName,
+        submissionId,
+        dto.comment || 'No specific reason provided'
+      );
     }
 
     await prisma.notification.create({

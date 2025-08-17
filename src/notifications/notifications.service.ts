@@ -66,6 +66,27 @@ export class NotificationsService {
     );
   }
 
+  async sendRejectionEmail(to: string, fullName: string, submissionId: number, reason: string) {
+    await this.emailQueue.add(
+      'send-email',
+      {
+        to,
+        subject: 'An Update on Your Submission',
+        content: `
+          <p>Hi ${fullName},</p>
+          <p>We're writing to let you know that we couldn't accept your National Service placement at this time. Our institution has reached its capacity, and we simply don't have any more available slots.</p>
+          <p>To secure a new placement, please follow the instructions from the National Service Secretariat to go through the reposting process. We wish you the best of luck with your reposting and your service year!</p>
+          <p>If you have any questions or need further clarification, please contact our support team at support@cocobod.com</p>
+          <p>Best regards,<br>NASPAC Team</p>
+        `,
+      },
+      {
+        attempts: 3,
+        backoff: 5000,
+      }
+    );
+  }
+
   async sendSupervisorAssignmentEmail(to: string, supervisorName: string, departmentName: string) {
   await this.emailQueue.add(
     'send-email',

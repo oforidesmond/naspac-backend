@@ -1,4 +1,4 @@
-import { IsString, IsEmail, IsEnum, IsOptional, IsInt, IsArray, IsNotEmpty, Min } from 'class-validator';
+import { IsString, IsEmail, IsEnum, IsOptional, IsInt, IsArray, IsNotEmpty, Min, Matches } from 'class-validator';
 import { Role, SubmissionStatus } from '@prisma/client';
 
 export class CreateUserDto {
@@ -24,6 +24,11 @@ export class CreateUserDto {
 
   @IsEnum(Role)
   role: Role;
+
+  @IsString()
+  @IsOptional()
+  @Matches(/^\+\d{10,15}$/, { message: 'Phone number must include country code (e.g., +233557484584)' })
+  phoneNumber?: string;
 }
 
 export class InitUserDto {
@@ -38,6 +43,11 @@ export class InitUserDto {
 
   @IsEnum(Role, { message: 'Role must be STAFF, ADMIN, or SUPERVISOR' })
   role: 'STAFF' | 'ADMIN' | 'SUPERVISOR';
+
+  @IsString()
+  @IsNotEmpty()
+  @Matches(/^\+\d{10,15}$/, { message: 'Phone number must include country code (e.g., +233557484584)' })
+  phoneNumber: string;
 }
 
 export class CreateDepartmentDto {

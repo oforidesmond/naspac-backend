@@ -52,7 +52,7 @@ export class DocumentsService {
     const thirdPage = pdfDoc.getPage(2);
     const { width, height } = thirdPage.getSize();
     const sigWidth = 100;
-    const sigHeight = 50;
+    const sigHeight = 100;
     const centerX = (width - sigWidth) / 2;
     const centerY = height / 2;
     const verticalOffset = 40;

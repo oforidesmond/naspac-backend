@@ -10,6 +10,7 @@ import { NotificationsModule } from 'src/notifications/notifications.module';
 import { HttpModule } from '@nestjs/axios';
 import { CaptchaGuard } from './captcha.guard';
 import { PrismaService } from 'prisma/prisma.service';
+import { SmsService } from './sms.service';
 
 @Module({
   imports: [
@@ -28,7 +29,7 @@ import { PrismaService } from 'prisma/prisma.service';
     ConfigModule,
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, CaptchaGuard, PrismaService],
+  providers: [AuthService, JwtStrategy, CaptchaGuard, PrismaService, SmsService],
   exports: [AuthService],
 })
 export class AuthModule {}

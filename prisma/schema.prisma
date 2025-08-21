@@ -19,6 +19,8 @@ model User {
   sigWidth            Int?   
   staffId             String?       @unique
   email               String?       @unique
+  phoneNumber         String?
+  tfaSecret           String?
   password            String?
   role                Role          @default(PERSONNEL)
   departmentId        Int?    

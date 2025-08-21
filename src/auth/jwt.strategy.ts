@@ -25,6 +25,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       this.logger.warn(`User not found for ID: ${payload.sub}`);
       return null;
     }
-    return { id: user.id, nssNumber: user.nssNumber, role: user.role, email: user.email, staffId: user.staffId };
+    return { id: user.id, nssNumber: user.nssNumber, role: user.role, email: user.email, staffId: user.staffId,  name: user.name,
+      isTfaRequired: payload.isTfaRequired || false };
   }
 }

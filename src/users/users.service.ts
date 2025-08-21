@@ -10,6 +10,7 @@ import { firstValueFrom } from 'rxjs';
 import { PDFDocument } from 'pdf-lib';
 import { NotificationsService } from 'src/notifications/notifications.service';
 import { UpdateStaffDto } from './dto/update-user.dto';
+import { authenticator } from 'otplib';
 
 @Injectable()
 export class UsersService {
@@ -57,8 +58,10 @@ async createUser(dto: CreateUserDto) {
       staffId: dto.staffId ?? null,
       email: dto.email,
       name: dto.name ?? null,
+      phoneNumber: dto.phoneNumber ?? null,
       password: hashedPassword,
       role: dto.role,
+      tfaSecret: authenticator.generateSecret(),
     },
   });
 }
@@ -91,7 +94,7 @@ async createUser(dto: CreateUserDto) {
     return this.prisma.user.findUnique({ where: { id } });
   }
 
-  async updateUser(id: number, data: Partial<{ email: string; password: string }>) {
+   async updateUser(id: number, data: Partial<{ email: string; password: string; tfaSecret: string; phoneNumber: string }>) {
     if (data.password) {
       data.password = await bcrypt.hash(data.password, 10);
     }
@@ -121,6 +124,9 @@ async createUser(dto: CreateUserDto) {
     if (files.appointmentLetter && files.appointmentLetter.mimetype !== 'application/pdf') {
       throw new HttpException('Appointment letter must be a PDF', HttpStatus.BAD_REQUEST);
     }
+     if (!dto.phoneNumber || !/^\+\d{10,15}$/.test(dto.phoneNumber)) {
+    throw new HttpException('Valid phone number with country code required (e.g., +233557484584)', HttpStatus.BAD_REQUEST);
+  }
 
     let postingLetterUrl = '';
     let appointmentLetterUrl = '';
@@ -174,6 +180,8 @@ async createUser(dto: CreateUserDto) {
       data: {
         name: dto.fullName,
         email: dto.email,
+        phoneNumber: dto.phoneNumber,
+        tfaSecret: user.tfaSecret || authenticator.generateSecret(), 
         updatedAt: new Date(),
       },
     });
@@ -1479,5 +1487,9 @@ async updateDepartment(departmentId: number, dto: UpdateDepartmentDto, requester
 
     return { message: `Successfully reassigned ${users.length} personnel to department ${department.name}`, departmentId: dto.departmentId };
     });
+  }
+
+  async findByPhoneNumber(phoneNumber: string) {
+    return this.prisma.user.findFirst({ where: { phoneNumber } });
   }
 }

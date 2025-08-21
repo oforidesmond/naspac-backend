@@ -5,6 +5,7 @@ import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { NotificationsService } from 'src/notifications/notifications.service';
 import { PrismaService } from 'prisma/prisma.service';
+import { SmsService } from './sms.service';
 
 @Injectable()
 export class AuthService {
@@ -13,6 +14,7 @@ export class AuthService {
     private jwtService: JwtService,
     private notificationsService: NotificationsService,
     private prisma: PrismaService,
+    private smsService: SmsService,
   ) {}
 
   // Validate STAFF or ADMIN user
@@ -35,7 +37,7 @@ export class AuthService {
       throw new HttpException('Invalid staff ID or password', HttpStatus.UNAUTHORIZED);
     }
 
-    return { id: user.id, staffId: user.staffId, role: user.role, email: user.email , name: user.name};
+    return { id: user.id, staffId: user.staffId, role: user.role, email: user.email , name: user.name, phoneNumber: user.phoneNumber};
   }
 
  async validatePersonnel(nssNumber: string, password: string): Promise<any> {
@@ -64,23 +66,62 @@ export class AuthService {
     throw new HttpException('Invalid NSS number or password', HttpStatus.UNAUTHORIZED);
   }
 
-  return { id: user.id, nssNumber: user.nssNumber, role: user.role, email: user.email, name: user.name };
+  const submission = await this.prisma.submission.findUnique({
+      where: { userId_nssNumber: { userId: user.id, nssNumber: user.nssNumber } },
+    });
+    return {
+      id: user.id,
+      nssNumber: user.nssNumber,
+      role: user.role,
+      email: user.email,
+      name: user.name,
+      phoneNumber: user.phoneNumber || submission?.phoneNumber,
+  };
 }
 
 async loginStaffAdmin(staffId: string, password: string) {
-    const user = await this.validateStaffAdmin(staffId, password);
-    const payload = { sub: user.id, identifier: user.staffId, role: user.role, name: user.name, email: user.email };
+     const user = await this.validateStaffAdmin(staffId, password);
+    if (!user.phoneNumber) {
+      throw new HttpException('Phone number not set. Please update your profile.', HttpStatus.BAD_REQUEST);
+    }
+    await this.smsService.sendOtp(user.id);
+    const tempPayload = { sub: user.id, identifier: user.staffId, role: user.role, name: user.name, email: user.email, isTfaRequired: true };
     return {
-      accessToken: this.jwtService.sign(payload),
-      role: user.role,
+      tempAccessToken: this.jwtService.sign(tempPayload, { expiresIn: '5m' }),
+      message: '2FA required. OTP sent to your phone.',
     };
   }
 
   async loginPersonnel(nssNumber: string, password: string) {
     const user = await this.validatePersonnel(nssNumber, password);
-    const payload = { sub: user.id, identifier: user.nssNumber, role: user.role, name: user.name, email: user.email || ''};
+    if (!user.phoneNumber) {
+      throw new HttpException('Phone number not set. Please complete onboarding.', HttpStatus.BAD_REQUEST);
+    }
+    await this.smsService.sendOtp(user.id);
+    const tempPayload = { sub: user.id, identifier: user.nssNumber, role: user.role, name: user.name, email: user.email || '', isTfaRequired: true };
+    return {
+      tempAccessToken: this.jwtService.sign(tempPayload, { expiresIn: '5m' }),
+      message: '2FA required. OTP sent to your phone.',
+    };
+  }
+
+  async verifyTfa(userId: number, token: string) {
+    const isValid = await this.smsService.verifyOtp(userId, token);
+    if (!isValid) {
+      throw new HttpException('Invalid OTP', HttpStatus.UNAUTHORIZED);
+    }
+    const user = await this.usersService.findById(userId);
+    const payload = {
+      sub: user.id,
+      identifier: user.staffId || user.nssNumber,
+      role: user.role,
+      name: user.name,
+      email: user.email || '',
+      isTfaRequired: false,
+    };
     return {
       accessToken: this.jwtService.sign(payload),
+      role: user.role,
     };
   }
 
@@ -199,7 +240,7 @@ async loginStaffAdmin(staffId: string, password: string) {
     return { message: 'Password reset successfully' };
   }
 
-  async initUser(staffId: string, email: string, name: string, role: 'STAFF' | 'ADMIN' | 'SUPERVISOR', initiatedBy: { id: number; role: string }) {
+  async initUser(staffId: string, email: string, name: string, role: 'STAFF' | 'ADMIN' | 'SUPERVISOR', initiatedBy: { id: number; role: string }, phoneNumber?: string) {
 
   if (initiatedBy.role !== 'ADMIN') {
     throw new HttpException('Unauthorized: Only admins can initiate user creation', HttpStatus.FORBIDDEN);
@@ -207,6 +248,9 @@ async loginStaffAdmin(staffId: string, password: string) {
 
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     throw new HttpException('Invalid email address', HttpStatus.BAD_REQUEST);
+  }
+  if (!phoneNumber || !/^\+\d{10,15}$/.test(phoneNumber)) {
+    throw new HttpException('Valid phone number with country code required (e.g., +233557484584)', HttpStatus.BAD_REQUEST);
   }
 
   const existingUser = await this.usersService.findByNssNumberOrStaffId(staffId);
@@ -216,6 +260,10 @@ async loginStaffAdmin(staffId: string, password: string) {
   const existingEmail = await this.usersService.findByEmail(email);
   if (existingEmail) {
     throw new HttpException('Email already registered', HttpStatus.BAD_REQUEST);
+  }
+  const existingPhone = await this.usersService.findByPhoneNumber(phoneNumber);
+  if (existingPhone) {
+    throw new HttpException('Phone number already registered', HttpStatus.BAD_REQUEST);
   }
 
   if (!['STAFF', 'ADMIN', 'SUPERVISOR'].includes(role)) {
@@ -227,6 +275,7 @@ async loginStaffAdmin(staffId: string, password: string) {
     email,
     name,
     role,
+    phoneNumber,
   });
 
   const token = crypto.randomBytes(32).toString('hex');
@@ -244,5 +293,14 @@ async loginStaffAdmin(staffId: string, password: string) {
   await this.notificationsService.sendOnboardingEmail(email, staffId, token);
 
   return { message: 'Onboarding link sent to email', email };
+  }
+
+  async resendOtp(userId: number) {
+  const user = await this.usersService.findById(userId);
+  if (!user) {
+    throw new HttpException('User not found', HttpStatus.BAD_REQUEST);
+  }
+  await this.smsService.sendOtp(userId);
+  return { message: 'OTP resent to your phone' };
   }
 }

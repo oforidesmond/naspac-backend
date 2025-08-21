@@ -1,4 +1,4 @@
-import { Controller, Post, Body, UseGuards, Request, Get, Req } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, Request, Get, Req, HttpException, HttpStatus } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { RateLimitGuard } from './rate-limit.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -11,10 +11,16 @@ import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { RequestForgotPasswordDto } from './dto/request-forgot-password.dto';
 import { OnboardingResetPasswordDto } from './dto/onboarding-reset-password.dto';
 import { InitUserDto } from 'src/users/dto/create-user.dto';
+import { SmsService } from './sms.service';
+import { TwoFactorAuthGuard } from 'src/common/guards/two-factor-auth.guard';
+import { TwoFaDto } from './dto/two-fa.dto';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  constructor(
+    private authService: AuthService,
+    private smsService: SmsService,
+  ) {}
 
   @Post('login-personnel')
   @UseGuards(RateLimitGuard)
@@ -28,10 +34,28 @@ export class AuthController {
     return this.authService.loginStaffAdmin(body.staffId, body.password);
   }
 
+   @Post('verifyTfa')
+  @UseGuards(JwtAuthGuard, RateLimitGuard)
+  async verifyTfa(@Req() req: any, @Body() body: TwoFaDto) {
+    if (!req.user.isTfaRequired) {
+      throw new HttpException('2FA not required for this token', HttpStatus.BAD_REQUEST);
+    }
+    return this.authService.verifyTfa(req.user.id, body.tfaToken);
+  }
+
+  @Post('resendTfa')
+  @UseGuards(JwtAuthGuard, RateLimitGuard)
+  async resendOtp(@Req() req: any) {
+    if (!req.user.isTfaRequired) {
+      throw new HttpException('No pending 2FA verification', HttpStatus.BAD_REQUEST);
+    }
+    return this.authService.resendOtp(req.user.id);
+  }
+
     @Get('validate')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(TwoFactorAuthGuard)
   async validateToken(@Req() req: any) {
-    return { success: true, userId: req.user.id, role: req.user.role, email: req.user.email, name: req.user.name, username: req.user.username };
+    return { success: true, userId: req.user.id, role: req.user.role, email: req.user.email, name: req.user.name};
   }
 
   @Post('logout')
@@ -51,7 +75,7 @@ export class AuthController {
   @UseGuards(JwtAuthGuard, RolesGuard, RateLimitGuard)
   @Roles('ADMIN')
   async initUser(@Body() body: InitUserDto, @Request() req) {
-    return this.authService.initUser(body.staffId, body.email, body.name, body.role, req.user);
+    return this.authService.initUser(body.staffId, body.email, body.name, body.role, req.user, body.phoneNumber);
   }
 
    @Post('request-forgot-password')

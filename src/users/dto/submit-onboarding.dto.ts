@@ -1,5 +1,5 @@
 import { SubmissionStatus } from '@prisma/client';
-import { IsString, IsEnum, IsEmail, IsInt, MinLength, IsOptional, Matches, IsArray } from 'class-validator';
+import { IsString, IsEnum, IsEmail, IsInt, MinLength, IsOptional, Matches, IsArray, IsNotEmpty } from 'class-validator';
 
 enum Gender {
   MALE = 'MALE',
@@ -23,7 +23,9 @@ export class SubmitOnboardingDto {
   @IsString()
   placeOfResidence: string;
 
-  @IsString()
+   @IsString()
+  @IsNotEmpty()
+  @Matches(/^\+\d{10,15}$/, { message: 'Phone number must include country code (e.g., +233557484584)' })
   phoneNumber: string;
 
   @IsString()

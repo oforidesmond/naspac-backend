@@ -10,7 +10,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { UsersController } from './users/users.controller';
 import { DatabaseModule } from './database.module';
 import { UsersService } from './users/users.service';
-
+import { SmsService } from './auth/sms.service';
 
 @Module({
   imports: [
@@ -22,6 +22,6 @@ import { UsersService } from './users/users.service';
     NotificationsModule,
   ],
   controllers: [AppController, UsersController],
-  providers: [AppService, UsersService],
+  providers: [AppService, UsersService, SmsService],
 })
 export class AppModule {}

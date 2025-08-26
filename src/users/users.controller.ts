@@ -131,6 +131,14 @@ async getUserProfile(@Request() req) {
     return this.usersService.getAllSubmissions();
   }
 
+  //all submissions
+  @Get('total-submissions')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('STAFF', 'ADMIN')
+  async getTotalSubmissions() {
+    return this.usersService.getSubmissions();
+  }
+
     @Get('onboarding-status')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('PERSONNEL')

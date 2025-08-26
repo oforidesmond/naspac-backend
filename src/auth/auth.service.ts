@@ -92,6 +92,19 @@ async loginStaffAdmin(staffId: string, password: string) {
     };
   }
 
+// async loginStaffAdmin(staffId: string, password: string) {
+//      const user = await this.validateStaffAdmin(staffId, password);
+//     if (!user.phoneNumber) {
+//       throw new HttpException('Phone number not set. Please update your profile.', HttpStatus.BAD_REQUEST);
+//     }
+//     // await this.smsService.sendOtp(user.id);
+//     const payload = { sub: user.id, identifier: user.staffId, role: user.role, name: user.name, email: user.email, isTfaRequired: true };
+//      return {
+//     accessToken: this.jwtService.sign(payload),
+//     role: user.role,
+//   };
+//   }
+
   async loginPersonnel(nssNumber: string, password: string) {
     const user = await this.validatePersonnel(nssNumber, password);
     if (!user.phoneNumber) {
@@ -105,15 +118,48 @@ async loginStaffAdmin(staffId: string, password: string) {
     };
   }
 
+
+//   async loginPersonnel(nssNumber: string, password: string) {
+//   const user = await this.validatePersonnel(nssNumber, password);
+//   if (!user.phoneNumber) {
+//     throw new HttpException('Phone number not set. Please complete onboarding.', HttpStatus.BAD_REQUEST);
+//   }
+//   // TEMPORARY BYPASS 2FA:
+//   // await this.twoFactorAuthService.sendOtp(user.id);
+//   // const tempPayload = { sub: user.id, identifier: user.nssNumber, role: user.role, name: user.name, email: user.email || '', isTfaRequired: true };
+//   // return {
+//   //   tempAccessToken: this.jwtService.sign(tempPayload, { expiresIn: '5m' }),
+//   //   message: '2FA required. OTP sent to your phone.',
+//   // };
+//   const payload = {
+//     sub: user.id,
+//     identifier: user.nssNumber,
+//     role: user.role,
+//     name: user.name,
+//     email: user.email || '',
+//     isTfaRequired: false,
+//   };
+//   return {
+//     accessToken: this.jwtService.sign(payload),
+//     role: user.role,
+//   };
+// }
   async verifyTfa(userId: number, token: string) {
     const isValid = await this.smsService.verifyOtp(userId, token);
     if (!isValid) {
       throw new HttpException('Invalid OTP', HttpStatus.UNAUTHORIZED);
     }
     const user = await this.usersService.findById(userId);
+    if (!user.staffId && (user.role === 'STAFF' || user.role === 'ADMIN' || user.role === 'SUPERVISOR')) {
+    throw new HttpException('Staff ID not found', HttpStatus.INTERNAL_SERVER_ERROR);
+  }
+    const identifier = user.role === 'PERSONNEL' ? user.nssNumber : user.staffId;
+  if (!identifier) {
+    throw new HttpException('User identifier not found', HttpStatus.INTERNAL_SERVER_ERROR);
+  }
     const payload = {
       sub: user.id,
-      identifier: user.staffId || user.nssNumber,
+      identifier,
       role: user.role,
       name: user.name,
       email: user.email || '',

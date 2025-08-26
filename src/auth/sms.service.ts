@@ -14,7 +14,7 @@ export class SmsService {
     private configService: ConfigService,
     private prisma: PrismaService,
   ) {
-    authenticator.options = { step: 60 };
+    authenticator.options = { step: 180 };
   }
 
   // Generate a TOTP secret for a user
@@ -58,7 +58,7 @@ export class SmsService {
       clientsecret: clientSecret,
       from: sender,
       to: phoneNumber,
-      content: `Your OTP is ${otp}. It expires in 60 seconds.`,
+      content: `Your OTP is ${otp}. It expires in 3 minutes.`,
     };
 
     try {

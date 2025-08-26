@@ -459,6 +459,38 @@ async createUser(dto: CreateUserDto) {
     });
   }
 
+  async getSubmissions() {
+    return this.prisma.submission.findMany({
+      select: {
+        id: true,
+        fullName: true,
+        nssNumber: true,
+        gender: true,
+        email: true,
+        placeOfResidence: true,
+        phoneNumber: true,
+        universityAttended: true,
+        regionOfSchool: true,
+        yearOfNss: true,
+        programStudied: true,
+        divisionPostedTo: true,
+        postingLetterUrl: true,
+        appointmentLetterUrl: true,
+        verificationFormUrl: true,
+        jobConfirmationLetterUrl: true,
+        status: true,
+        createdAt: true,
+        updatedAt: true,
+        user: {
+          select: {
+            department: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
 async updateSubmissionStatus(
   userId: number,
   submissionId: number,

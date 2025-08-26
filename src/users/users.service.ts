@@ -7,7 +7,7 @@ import { createClient } from '@supabase/supabase-js';
 import { HttpService } from '@nestjs/axios';
 import { GetSubmissionStatusCountsDto, SubmitOnboardingDto, UpdateSubmissionStatusDto } from './dto/submit-onboarding.dto';
 import { firstValueFrom } from 'rxjs';
-import { PDFDocument } from 'pdf-lib';
+import { PDFDocument, StandardFonts } from 'pdf-lib';
 import { NotificationsService } from 'src/notifications/notifications.service';
 import { UpdateStaffDto } from './dto/update-user.dto';
 import { authenticator } from 'otplib';
@@ -447,7 +447,7 @@ async updateSubmissionStatus(
 
   const submission = await this.prisma.submission.findUnique({
     where: { id: submissionId },
-    select: { id: true, userId: true, fullName: true, nssNumber: true, email: true, status: true, deletedAt: true, jobConfirmationLetterUrl: true },
+    select: { id: true, userId: true, fullName: true, nssNumber: true, email: true, status: true, deletedAt: true, jobConfirmationLetterUrl: true, phoneNumber: true, user: { select: { department: true } } },
   });
   if (!submission || submission.deletedAt) {
     throw new HttpException('Submission not found', HttpStatus.NOT_FOUND);
@@ -478,7 +478,6 @@ async updateSubmissionStatus(
     let jobConfirmationLetterUrl = submission.jobConfirmationLetterUrl;
 
     // Commented out the letter generation logic to disable it
-    /*
     if (dto.status === 'VALIDATED' && !jobConfirmationLetterUrl) {
       const template = await prisma.template.findFirst({
         where: { type: 'job_confirmation' },
@@ -500,14 +499,50 @@ async updateSubmissionStatus(
       const templateBuffer = await templateData.arrayBuffer();
       const pdfDoc = await PDFDocument.load(templateBuffer);
   
+      const letterBodyTemplate = `APPOINTMENT – NATIONAL SERVICE \${yearRange}
+We are pleased to inform you have been accepted to undertake your National Service at the \${department} Department, COCOBOD Head Office, Accra with effect from Friday, November 1, \${currentYear} to Friday, October 31, \${nextYear}.
+
+You will be subjected to Ghana Cocoa Board will pay your National Service Allowance of Seven Hundred and Fifteen Ghana Cedis, Fifty-Seven Pesewas (GHc 715.57) per month.
+
+You will not be covered by the Board’s Insurance Scheme during the period of your Service with the Board.
+
+We hope you will work diligently and comport yourself during the period of your Service with the Board.
+
+Kindly report with your Bank Account Details either on a bank statement, copy of cheque leaflet or pay-in-slip.
+
+You will be entitled to one (1) month terminal leave in October \${nextYear}.
+
+Please report to the undersigned for further directives.
+
+You can count on our co-operation.`;
+
       const form = pdfDoc.getForm();
       const nameField = form.getTextField('name');
       const dateField = form.getTextField('date');
-      if (!nameField || !dateField) {
-        throw new HttpException('Template missing required form fields (name, date)', HttpStatus.INTERNAL_SERVER_ERROR);
+      const phoneField = form.getTextField('phone');
+      const bodyField = form.getTextField('body');
+      // const departmentField = form.getTextField('department');
+      if (!nameField || !dateField || !phoneField) {
+        throw new HttpException('Template missing required form fields (name, date, phone, department)', HttpStatus.INTERNAL_SERVER_ERROR);
       }
+
+      // Calculate dynamic values
+      const currentYear = new Date().getFullYear();
+      const yearRange = currentYear === 2025 ? '2024/2025' : `${currentYear}/${currentYear + 1}`;
+      const nextYear = currentYear + 1;
+      const departmentName = submission.user.department.name;
+
+      // Construct the letter body by replacing placeholders
+      const letterBody = letterBodyTemplate
+        .replace('${yearRange}', yearRange)
+        .replace('${department}', departmentName)
+        .replace('${currentYear}', currentYear.toString())
+        .replace(/\${nextYear}/g, nextYear.toString());
+
       nameField.setText(submission.fullName);
       dateField.setText(moment().format('YYYY-MM-DD'));
+      phoneField.setText(submission.phoneNumber);
+      bodyField.setText(letterBody);
 
       form.flatten();
 
@@ -528,7 +563,6 @@ async updateSubmissionStatus(
       }
       jobConfirmationLetterUrl = urlData.publicUrl;
     }
-    */
 
     const updatedSubmission = await prisma.submission.update({
       where: { id: submissionId },
@@ -545,7 +579,9 @@ async updateSubmissionStatus(
         submissionId,
         action: `STATUS_CHANGED_TO_${dto.status}`,
         userId,
-        details: `${dto.comment || `Submission status changed to ${dto.status}`}`,
+        details: `${dto.comment || `Submission status changed to ${dto.status}`}${
+          dto.status === 'VALIDATED' && jobConfirmationLetterUrl ? ' and job confirmation letter generated' : ''
+        }`,
         createdAt: new Date(),
       },
     });

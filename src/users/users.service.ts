@@ -11,6 +11,30 @@ import { PDFDocument, StandardFonts } from 'pdf-lib';
 import { NotificationsService } from 'src/notifications/notifications.service';
 import { UpdateStaffDto } from './dto/update-user.dto';
 import { authenticator } from 'otplib';
+import * as pdfMake from 'pdfmake/build/pdfmake';
+import * as pdfFonts from 'pdfmake/build/vfs_fonts';
+import * as fs from 'fs';
+import * as path from 'path';
+
+function getBase64Image(filePath: string): string {
+  const absPath = path.resolve(filePath);
+  const file = fs.readFileSync(absPath);
+  return file.toString('base64');
+}
+
+(pdfMake as any).vfs = pdfFonts.vfs;
+
+const letterheadBase64 = getBase64Image('src/assets/letterhead.png');
+const signatureBase64 = getBase64Image('src/assets/signature.png');
+
+const fonts = {
+  Roboto: {
+    normal: 'Roboto-Regular.ttf',
+    bold: 'Roboto-Medium.ttf',
+    italics: 'Roboto-Italic.ttf',
+    bolditalics: 'Roboto-MediumItalic.ttf',
+  },
+};
 
 @Injectable()
 export class UsersService {
@@ -479,78 +503,118 @@ async updateSubmissionStatus(
 
     // Commented out the letter generation logic to disable it
     if (dto.status === 'VALIDATED' && !jobConfirmationLetterUrl) {
-      const template = await prisma.template.findFirst({
-        where: { type: 'job_confirmation' },
-        orderBy: { createdAt: 'desc' },
-        select: { fileUrl: true },
-      });
-      if (!template) {
-        throw new HttpException('No job confirmation letter template found', HttpStatus.INTERNAL_SERVER_ERROR);
-      }
-
-      const fileKey = template.fileUrl.replace(`${process.env.SUPABASE_URL}/storage/v1/object/public/killermike/`, '');
-      const { data: templateData, error: templateError } = await supabase.storage
-        .from('killermike')
-        .download(fileKey);
-      if (templateError || !templateData) {
-        throw new HttpException('Failed to retrieve template', HttpStatus.INTERNAL_SERVER_ERROR);
-      }
-
-      const templateBuffer = await templateData.arrayBuffer();
-      const pdfDoc = await PDFDocument.load(templateBuffer);
-  
-      const letterBodyTemplate = `APPOINTMENT – NATIONAL SERVICE \${yearRange}
-We are pleased to inform you have been accepted to undertake your National Service at the \${department} Department, COCOBOD Head Office, Accra with effect from Friday, November 1, \${currentYear} to Friday, October 31, \${nextYear}.
-
-You will be subjected to Ghana Cocoa Board will pay your National Service Allowance of Seven Hundred and Fifteen Ghana Cedis, Fifty-Seven Pesewas (GHc 715.57) per month.
-
-You will not be covered by the Board’s Insurance Scheme during the period of your Service with the Board.
-
-We hope you will work diligently and comport yourself during the period of your Service with the Board.
-
-Kindly report with your Bank Account Details either on a bank statement, copy of cheque leaflet or pay-in-slip.
-
-You will be entitled to one (1) month terminal leave in October \${nextYear}.
-
-Please report to the undersigned for further directives.
-
-You can count on our co-operation.`;
-
-      const form = pdfDoc.getForm();
-      const nameField = form.getTextField('name');
-      const dateField = form.getTextField('date');
-      const phoneField = form.getTextField('phone');
-      const bodyField = form.getTextField('body');
-      // const departmentField = form.getTextField('department');
-      if (!nameField || !dateField || !phoneField) {
-        throw new HttpException('Template missing required form fields (name, date, phone, department)', HttpStatus.INTERNAL_SERVER_ERROR);
-      }
-
-      // Calculate dynamic values
-      const currentYear = new Date().getFullYear();
+       const currentYear = new Date().getFullYear();
       const yearRange = currentYear === 2025 ? '2024/2025' : `${currentYear}/${currentYear + 1}`;
       const nextYear = currentYear + 1;
+      const today = moment().format('YYYY-MM-DD');
       const departmentName = submission.user.department.name;
 
-      // Construct the letter body by replacing placeholders
-      const letterBody = letterBodyTemplate
-        .replace('${yearRange}', yearRange)
-        .replace('${department}', departmentName)
-        .replace('${currentYear}', currentYear.toString())
-        .replace(/\${nextYear}/g, nextYear.toString());
+      // Define PDF document
+      const docDefinition = {
+          background: [
+    {
+      image: 'letterhead',
+      width: 595,   // A4 page width in points (72dpi) → adjust to fit
+      absolutePosition: { x: 0, y: 0 }, // start top-left corner
+    },
+  ],
+    content: [
+      { text: '', bold: true, fontSize: 14, alignment: 'center', margin: [0, 0, 0, 20] },
+      { text: ``, alignment: 'right', fontSize: 11, margin: [0, 0, 0, 5] },
+      { text: ``, alignment: 'right', fontSize: 11, margin: [0, 0, 0, 20] },
+      { text: ``, fontSize: 11, margin: [0, 0, 0, 20] },
+      {
+        text: `APPOINTMENT – NATIONAL SERVICE ${yearRange}`,
+        bold: true,
+        fontSize: 12,
+        alignment: 'center',
+        decoration: 'underline',
+        margin: [0, 50, 0, 20],
+      },
+      {
+        text: [
+          'We are pleased to inform you have been accepted to undertake your National Service at the ',
+          { text: `${departmentName} Department, COCOBOD Head Office, Accra`, bold: true },
+          ' with effect from ',
+          { text: `Friday, November 1, ${currentYear} to Friday, October 31, ${nextYear}`, bold: true },
+          '.',
+        ],
+        fontSize: 11,
+        margin: [0, 0, 0, 10],
+      },
+      {
+        text: [
+          'You will be subjected to Ghana Cocoa Board will pay your National Service Allowance of ',
+          { text: 'Seven Hundred and Fifteen Ghana Cedis, Fifty-Seven Pesewas (GHc 715.57)', bold: true },
+          ' per month.',
+        ],
+        fontSize: 11,
+        margin: [0, 0, 0, 10],
+      },
+      {
+        text: 'You will not be covered by the Board’s Insurance Scheme during the period of your Service with the Board.',
+        fontSize: 11,
+        margin: [0, 0, 0, 10],
+      },
+      {
+        text: 'We hope you will work diligently and comport yourself during the period of your Service with the Board.',
+        fontSize: 11,
+        margin: [0, 0, 0, 10],
+      },
+      {
+        text: 'Kindly report with your Bank Account Details either on a bank statement, copy of cheque leaflet or pay-in-slip.',
+        fontSize: 11,
+        margin: [0, 0, 0, 10],
+      },
+      {
+        text: [
+          'You will be entitled to one (1) month terminal leave in ',
+          { text: `October ${nextYear}`, bold: true },
+          '.',
+        ],
+        fontSize: 11,
+        margin: [0, 0, 0, 10],
+      },
+      {
+        text: 'Please report to the undersigned for further directives.\n\nYou can count on our co-operation.',
+        fontSize: 11,
+        margin: [0, 0, 0, 20],
+      },
+       {
+      image: 'signature',
+      width: 120,  // adjust size
+      alignment: 'left',
+      margin: [0, 0, 0, 5],
+    },
 
-      nameField.setText(submission.fullName);
-      dateField.setText(moment().format('YYYY-MM-DD'));
-      phoneField.setText(submission.phoneNumber);
-      bodyField.setText(letterBody);
+      { text: 'PAZ OWUSU BOAKYE (MRS.)', bold: true, fontSize: 11, margin: [0, 0, 0, 5] },
+      { text: 'DEPUTY DIRECTOR, HUMAN RESOURCE', fontSize: 11, margin: [0, 0, 0, 20] },
+      {
+        text: 'cc:  Director, Human Resource\n      Director, Finance\n      Info. Systems Manager\n      HUMAN RESOURCE DEPARTMENT',
+        fontSize: 11,
+      },
+    ],
+    
+      images: {
+    letterhead: `data:image/png;base64,${letterheadBase64}`,
+    signature: `data:image/png;base64,${signatureBase64}`,
+  },
+    defaultStyle: {
+      font: 'Roboto',
+      fontSize: 11,
+    },
+    pageMargins: [40, 100, 40, 60],
+  };
 
-      form.flatten();
-
-      const pdfBytes = await pdfDoc.save();
-      const fileKeyOutput = `job-confirmation-letters/${submissionId}-${Date.now()}.pdf`;
+      // Generate PDF and upload to Supabase
+  const pdfDoc = (pdfMake as any).createPdf(docDefinition, null, fonts);
+       const pdfBuffer: Buffer = await new Promise((resolve, reject) => {
+    pdfDoc.getBuffer((buffer: Buffer) => resolve(buffer));
+  });
+       const fileKeyOutput = `job-confirmation-letters/${submissionId}-${Date.now()}.pdf`;
       const { error: uploadError } = await supabase.storage
         .from('killermike')
-        .upload(fileKeyOutput, pdfBytes, {
+        .upload(fileKeyOutput, pdfBuffer as Buffer, {
           contentType: 'application/pdf',
           cacheControl: '3600',
         });
@@ -619,7 +683,7 @@ You can count on our co-operation.`;
     });
 
     return updatedSubmission;
-  });
+  }, { timeout: 20000 });
 }
 
   async getSubmissionStatusCounts(userId: number, dto: GetSubmissionStatusCountsDto) {

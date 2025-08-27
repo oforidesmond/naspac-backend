@@ -1,18 +1,21 @@
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
-import { SupabaseStorageService } from './supabase-storage.service';
+import { LocalStorageService } from './local-storage.service';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import { createHash } from 'crypto';
 import { PrismaService } from 'prisma/prisma.service';
 import { Readable } from 'stream';
-import { createClient } from '@supabase/supabase-js';
+// Supabase removed in favor of local storage
 import { NotificationsService } from 'src/notifications/notifications.service';
+import { HttpService } from '@nestjs/axios';
+import { firstValueFrom } from 'rxjs';
 
 @Injectable()
 export class DocumentsService {
   constructor(
     private prisma: PrismaService,
-    private supabaseStorageService: SupabaseStorageService,
+    private localStorageService: LocalStorageService,
     private notificationsService: NotificationsService,
+    private httpService: HttpService,
   ) {}
 
   async signDocument(
@@ -21,6 +24,7 @@ export class DocumentsService {
     adminId: number,
     signatureImagePath?: string,
     stampImagePath?: string,
+    originalUrl?: string,
   ) {
     try {
     const submission = await this.prisma.submission.findUnique({
@@ -31,8 +35,21 @@ export class DocumentsService {
         throw new Error('Submission not found or not ready for endorsement');
       }
 
-      console.log('Fetching file from Supabase:', { fileName });
-      const fileBuffer = await this.supabaseStorageService.getFile(fileName);
+      console.log('Fetching file for signing:', { fileName });
+      let fileBuffer: Buffer;
+      try {
+        fileBuffer = await this.localStorageService.getFile(fileName);
+      } catch (e) {
+        // Fallback for legacy Supabase URLs: fetch remote once and cache locally under the expected key
+        if (originalUrl && /^https?:\/\//i.test(originalUrl)) {
+          const response = await firstValueFrom(this.httpService.get(originalUrl, { responseType: 'arraybuffer' }));
+          const buffer = Buffer.from(response.data);
+          await this.localStorageService.uploadFile(buffer, fileName);
+          fileBuffer = buffer;
+        } else {
+          throw e;
+        }
+      }
       console.log('PDF buffer size:', fileBuffer.length);
       if (!fileBuffer || fileBuffer.length === 0) {
         console.error('File buffer is null or empty for:', { fileName });
@@ -73,8 +90,8 @@ export class DocumentsService {
       });
 
       if (signatureImagePath && stampImagePath) {
-      const signatureImageBuffer = await this.supabaseStorageService.getFile(signatureImagePath, 'killermike');
-      const stampImageBuffer = await this.supabaseStorageService.getFile(stampImagePath, 'killermike');
+      const signatureImageBuffer = await this.localStorageService.getFile(signatureImagePath);
+      const stampImageBuffer = await this.localStorageService.getFile(stampImagePath);
 
       console.log('Signature buffer size:', signatureImageBuffer.length);
       console.log('Stamp buffer size:', stampImageBuffer.length);
@@ -158,7 +175,7 @@ export class DocumentsService {
       const documentHash = createHash('sha256').update(modifiedPdfBuffer).digest('hex');
 
       const signedFileName = `signed-${fileName}`;
-      const signedUrl = await this.supabaseStorageService.uploadFile(
+      const signedUrl = await this.localStorageService.uploadFile(
         modifiedPdfBuffer,
         signedFileName,
       );
@@ -180,7 +197,7 @@ export class DocumentsService {
         data: {
           submissionId,
           adminId,
-          originalUrl: await this.supabaseStorageService.getPublicUrl(fileName),
+          originalUrl: await this.localStorageService.getPublicUrl(fileName),
           signedUrl,
           signedAt: new Date(),
           documentHash,
@@ -299,20 +316,13 @@ export class DocumentsService {
     throw new HttpException(`No ${type} letter found for submission`, HttpStatus.NOT_FOUND);
   }
 
-  const fileName = fileUrl.replace(`${process.env.SUPABASE_URL}/storage/v1/object/public/killermike/`, '');
+  const fileName = fileUrl.startsWith('/files/') ? fileUrl.replace('/files/', '') : fileUrl;
   if (!fileName) {
     throw new HttpException('Invalid file URL', HttpStatus.BAD_REQUEST);
   }
 
   try {
-     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
-    const { data, error } = await supabase.storage.from('killermike').download(fileName);
-    if (error || !data) {
-      throw new HttpException(`Failed to retrieve ${type} letter`, HttpStatus.NOT_FOUND);
-    }
-
-     const arrayBuffer = await data.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
+    const buffer = await this.localStorageService.getFile(fileName);
     const stream = new Readable();
     stream.push(buffer);
     stream.push(null);
@@ -381,30 +391,15 @@ export class DocumentsService {
     throw new HttpException('Template must be a PDF or Word file', HttpStatus.BAD_REQUEST);
   }
 
-  const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
-
   const fileExtension = template.mimetype === 'application/pdf' ? 'pdf' : 'docx';
   const fileKey = `templates/job-confirmation-${userId}-${Date.now()}.${fileExtension}`;
-  const { error } = await supabase.storage
-    .from('killermike')
-    .upload(fileKey, template.buffer, {
-      contentType: template.mimetype,
-      cacheControl: '3600',
-    });
-  if (error) {
-    console.error('Failed to upload template:', error);
-    throw new HttpException(`Failed to upload template: ${error.message}`, HttpStatus.INTERNAL_SERVER_ERROR);
-  }
-  const { data: urlData } = supabase.storage.from('killermike').getPublicUrl(fileKey);
-  if (!urlData || !urlData.publicUrl) {
-    throw new HttpException('Failed to get public URL for template', HttpStatus.INTERNAL_SERVER_ERROR);
-  }
+  const publicUrl = await this.localStorageService.uploadFile(template.buffer, fileKey);
 
   const templateRecord = await this.prisma.template.create({
     data: {
       name: name || 'Job Confirmation Letter Template',
       type: 'job_confirmation',
-      fileUrl: urlData.publicUrl,
+      fileUrl: publicUrl,
       createdBy: userId,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -496,32 +491,17 @@ export class DocumentsService {
     throw new HttpException('A valid PDF file is required', HttpStatus.BAD_REQUEST);
   }
 
-  const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
   const fileKey = `job-confirmation-letters/${submissionId}-${Date.now()}.pdf`;
 
   return this.prisma.$transaction(async (prisma) => {
-    // Upload PDF to Supabase
-    const { error: uploadError } = await supabase.storage
-      .from('killermike')
-      .upload(fileKey, file.buffer, {
-        contentType: 'application/pdf',
-        cacheControl: '3600',
-      });
-    if (uploadError) {
-      throw new HttpException(`Failed to upload appointment letter: ${uploadError.message}`, HttpStatus.INTERNAL_SERVER_ERROR);
-    }
-
-    const { data: urlData } = supabase.storage.from('killermike').getPublicUrl(fileKey);
-    if (!urlData || !urlData.publicUrl) {
-      throw new HttpException('Failed to get public URL for appointment letter', HttpStatus.INTERNAL_SERVER_ERROR);
-    }
+    const publicUrl = await this.localStorageService.uploadFile(file.buffer, fileKey);
 
     // Update submission with jobConfirmationLetterUrl and status
     const updatedSubmission = await prisma.submission.update({
       where: { id: submissionId },
       data: {
         status: 'COMPLETED',
-        jobConfirmationLetterUrl: urlData.publicUrl,
+        jobConfirmationLetterUrl: publicUrl,
         updatedAt: new Date(),
       },
       select: { id: true, userId: true, fullName: true, nssNumber: true, status: true, jobConfirmationLetterUrl: true },

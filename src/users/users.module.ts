@@ -4,7 +4,7 @@ import { UsersService } from './users.service';
 import { PrismaService } from 'prisma/prisma.service';
 import { MulterModule } from '@nestjs/platform-express';
 import { HttpModule, HttpService } from '@nestjs/axios';
-import { SupabaseStorageService } from 'src/documents/supabase-storage.service';
+import { LocalStorageService } from 'src/documents/local-storage.service';
 import { NotificationsModule } from 'src/notifications/notifications.module';
 
 @Module({
@@ -26,7 +26,7 @@ import { NotificationsModule } from 'src/notifications/notifications.module';
     }),
   ],
   controllers: [UsersController],
-  providers: [UsersService, PrismaService, SupabaseStorageService],
+  providers: [UsersService, PrismaService, LocalStorageService],
   exports: [UsersService, HttpModule],
 })
 export class UsersModule {}

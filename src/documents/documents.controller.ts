@@ -46,16 +46,22 @@ export class DocumentsController {
       );
     }
 
-    const fileName =
-      documentType === 'postingLetter'
-         ? submission.postingLetterUrl.replace(
-      `${process.env.SUPABASE_URL}/storage/v1/object/public/killermike/`,
-      '',
-    )
-  : submission.appointmentLetterUrl.replace(
-      `${process.env.SUPABASE_URL}/storage/v1/object/public/killermike/`,
-      '',
-    );
+    const normalizeToFileKey = (url: string) => {
+      if (!url) return '';
+      if (url.startsWith('/files/')) return url.replace('/files/', '');
+      try {
+        const u = new URL(url);
+        const marker = '/storage/v1/object/public/killermike/';
+        const idx = u.pathname.indexOf(marker);
+        if (idx !== -1) {
+          return u.pathname.substring(idx + marker.length);
+        }
+      } catch {}
+      return url;
+    };
+
+    const rawUrl = documentType === 'postingLetter' ? submission.postingLetterUrl : submission.appointmentLetterUrl;
+    const fileName = normalizeToFileKey(rawUrl);
 console.log('Raw URL:', submission.appointmentLetterUrl, 'Parsed fileName:', fileName);
 
     if (!fileName) {
@@ -69,6 +75,7 @@ console.log('Raw URL:', submission.appointmentLetterUrl, 'Parsed fileName:', fil
       req.user.id,
       admin.signage,
       admin.stamp,
+      rawUrl,
     );
 
     return {

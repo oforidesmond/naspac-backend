@@ -1,5 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
+import { NestExpressApplication } from '@nestjs/platform-express';
+import { join } from 'path';
 import { ConfigService } from '@nestjs/config';
 import { ExpressAdapter } from '@bull-board/express';
 import { Queue } from 'bull';
@@ -8,7 +10,7 @@ import { BullAdapter } from '@bull-board/api/bullAdapter';
 // import { ValidationPipe } from '@nestjs/common';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const configService = app.get(ConfigService);
   const port = configService.get<number>('PORT') || 3000;
 
@@ -30,6 +32,8 @@ async function bootstrap() {
   });
 
   const expressApp = app.getHttpAdapter().getInstance();
+  // Serve local storage directory statically under /files
+  expressApp.use('/files', (require('express') as any).static(join(process.cwd(), 'storage')));
   expressApp.use('/admin/queues', serverAdapter.getRouter());
 
   await app.listen(port);

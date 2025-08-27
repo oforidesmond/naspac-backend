@@ -3,7 +3,7 @@ import { AssignPersonnelToDepartmentDto, ChangePersonnelDepartmentDto, CreateDep
 import * as bcrypt from 'bcrypt';
 import moment from 'moment';
 import { PrismaService } from 'prisma/prisma.service';
-import { createClient } from '@supabase/supabase-js';
+// import { createClient } from '@supabase/supabase-js';
 import { HttpService } from '@nestjs/axios';
 import { GetSubmissionStatusCountsDto, SubmitOnboardingDto, UpdateSubmissionStatusDto } from './dto/submit-onboarding.dto';
 import { firstValueFrom } from 'rxjs';
@@ -38,15 +38,21 @@ const fonts = {
 
 @Injectable()
 export class UsersService {
-  private supabase = createClient(
-    process.env.SUPABASE_URL,
-    process.env.SUPABASE_KEY
-  );
+  // Removed Supabase client; using local storage instead
 
   constructor(private prisma: PrismaService,
     private httpService: HttpService,
     private notificationsService: NotificationsService,
   ) {}
+
+  private toAbsoluteFileUrl(url?: string | null): string | null {
+    if (!url) return url ?? null;
+    if (url.startsWith('/files/')) {
+      const base = process.env.PUBLIC_BASE_URL || '';
+      return `${base}${url}`;
+    }
+    return url;
+  }
 
   async getUserProfile(userId: number) {
   const user = await this.prisma.user.findUnique({
@@ -148,49 +154,31 @@ async createUser(dto: CreateUserDto) {
     if (files.appointmentLetter && files.appointmentLetter.mimetype !== 'application/pdf') {
       throw new HttpException('Appointment letter must be a PDF', HttpStatus.BAD_REQUEST);
     }
-     if (!dto.phoneNumber || !/^\+\d{10,15}$/.test(dto.phoneNumber)) {
-    throw new HttpException('Valid phone number with country code required (e.g., +233557484584)', HttpStatus.BAD_REQUEST);
-  }
+  //    if (!dto.phoneNumber || !/^\+\d{10,15}$/.test(dto.phoneNumber)) {
+  //   throw new HttpException('Valid phone number with country code required (e.g., +233557484584)', HttpStatus.BAD_REQUEST);
+  // }
 
     let postingLetterUrl = '';
     let appointmentLetterUrl = '';
 
     if (files.postingLetter) {
       const fileKey = `posting-letters/${userId}-${Date.now()}.pdf`;
-      const { data, error } = await this.supabase.storage
-        .from('killermike')
-        .upload(fileKey, files.postingLetter.buffer, {
-          contentType: 'application/pdf',
-          cacheControl: '3600',
-        });
-      if (error) {
-        console.error('Failed to upload posting letter:', error);
-        throw new HttpException(`Failed to upload posting letter: ${error.message}`, HttpStatus.INTERNAL_SERVER_ERROR);
-      }
-      const { data: urlData } = this.supabase.storage
-        .from('killermike')
-        .getPublicUrl(fileKey);
-
-      if (!urlData || !urlData.publicUrl) {
-        throw new HttpException('Failed to get public URL for posting letter', HttpStatus.INTERNAL_SERVER_ERROR);
-      }
-      postingLetterUrl = urlData.publicUrl;
+      postingLetterUrl = `/files/${fileKey}`;
+      const fs = await import('fs');
+      const path = await import('path');
+      const targetPath = path.join(process.cwd(), 'storage', fileKey);
+      await fs.promises.mkdir(path.dirname(targetPath), { recursive: true });
+      await fs.promises.writeFile(targetPath, files.postingLetter.buffer);
     }
 
     if (files.appointmentLetter) {
       const fileKey = `appointment-letters/${userId}-${Date.now()}.pdf`;
-      const { data, error } = await this.supabase.storage
-        .from('killermike')
-        .upload(fileKey, files.appointmentLetter.buffer, {
-          contentType: 'application/pdf',
-        });
-      if (error) {
-        throw new HttpException(`Failed to upload appointment letter: ${error.message}`, HttpStatus.INTERNAL_SERVER_ERROR);
-      }
-      const { data: urlData } = this.supabase.storage
-        .from('killermike')
-        .getPublicUrl(fileKey);
-      appointmentLetterUrl = urlData.publicUrl;
+      appointmentLetterUrl = `/files/${fileKey}`;
+      const fs = await import('fs');
+      const path = await import('path');
+      const targetPath = path.join(process.cwd(), 'storage', fileKey);
+      await fs.promises.mkdir(path.dirname(targetPath), { recursive: true });
+      await fs.promises.writeFile(targetPath, files.appointmentLetter.buffer);
     }
 
     const yearOfNss = parseInt(dto.yearOfNss, 10);
@@ -204,7 +192,7 @@ async createUser(dto: CreateUserDto) {
       data: {
         name: dto.fullName,
         email: dto.email,
-        phoneNumber: dto.phoneNumber,
+        // phoneNumber: dto.phoneNumber,
         tfaSecret: user.tfaSecret || authenticator.generateSecret(), 
         updatedAt: new Date(),
       },
@@ -311,24 +299,13 @@ async createUser(dto: CreateUserDto) {
     throw new HttpException('Verification form must be a PDF', HttpStatus.BAD_REQUEST);
   }
 
-  const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
-
   const fileKey = `verification-forms/${userId}-${Date.now()}.pdf`;
-  const { data, error } = await supabase.storage
-    .from('killermike')
-    .upload(fileKey, verificationForm.buffer, {
-      contentType: 'application/pdf',
-      cacheControl: '3600',
-    });
-  if (error) {
-    console.error('Failed to upload verification form:', error);
-    throw new HttpException(`Failed to upload verification form: ${error.message}`, HttpStatus.INTERNAL_SERVER_ERROR);
-  }
-  const { data: urlData } = supabase.storage.from('killermike').getPublicUrl(fileKey);
-  if (!urlData || !urlData.publicUrl) {
-    throw new HttpException('Failed to get public URL for verification form', HttpStatus.INTERNAL_SERVER_ERROR);
-  }
-  const verificationFormUrl = urlData.publicUrl;
+  const fs = await import('fs');
+  const path = await import('path');
+  const targetPath = path.join(process.cwd(), 'storage', fileKey);
+  await fs.promises.mkdir(path.dirname(targetPath), { recursive: true });
+  await fs.promises.writeFile(targetPath, verificationForm.buffer);
+  const verificationFormUrl = `/files/${fileKey}`;
 
   return this.prisma.$transaction(async (prisma) => {
     const updatedSubmission = await prisma.submission.update({
@@ -430,7 +407,7 @@ async createUser(dto: CreateUserDto) {
 
    async getAllSubmissions() {
     const currentYear = new Date().getFullYear();
-    return this.prisma.submission.findMany({
+    const submissions = await this.prisma.submission.findMany({
         where: {
       yearOfNss: currentYear,
     },
@@ -441,7 +418,6 @@ async createUser(dto: CreateUserDto) {
         gender: true,
         email: true,
         placeOfResidence: true,
-        phoneNumber: true,
         universityAttended: true,
         regionOfSchool: true,
         yearOfNss: true,
@@ -454,13 +430,27 @@ async createUser(dto: CreateUserDto) {
         status: true,
         createdAt: true,
         updatedAt: true,
+         user: {
+        select: {
+          phoneNumber: true,
+        },
       },
+    },
       orderBy: { createdAt: 'desc' },
     });
+    return submissions.map((s) => ({
+      ...s,
+      phoneNumber: s.user?.phoneNumber || 'N/A',
+      postingLetterUrl: this.toAbsoluteFileUrl(s.postingLetterUrl),
+      appointmentLetterUrl: this.toAbsoluteFileUrl(s.appointmentLetterUrl),
+      verificationFormUrl: this.toAbsoluteFileUrl(s.verificationFormUrl),
+      jobConfirmationLetterUrl: this.toAbsoluteFileUrl(s.jobConfirmationLetterUrl),
+      user: undefined, 
+    }));
   }
 
   async getSubmissions() {
-    return this.prisma.submission.findMany({
+    const submissions = await this.prisma.submission.findMany({
       select: {
         id: true,
         fullName: true,
@@ -468,7 +458,6 @@ async createUser(dto: CreateUserDto) {
         gender: true,
         email: true,
         placeOfResidence: true,
-        phoneNumber: true,
         universityAttended: true,
         regionOfSchool: true,
         yearOfNss: true,
@@ -484,11 +473,20 @@ async createUser(dto: CreateUserDto) {
         user: {
           select: {
             department: true,
+            phoneNumber: true,
           },
         },
       },
       orderBy: { createdAt: 'desc' },
     });
+    return submissions.map((s) => ({
+      ...s,
+      postingLetterUrl: this.toAbsoluteFileUrl(s.postingLetterUrl),
+      appointmentLetterUrl: this.toAbsoluteFileUrl(s.appointmentLetterUrl),
+      verificationFormUrl: this.toAbsoluteFileUrl(s.verificationFormUrl),
+      jobConfirmationLetterUrl: this.toAbsoluteFileUrl(s.jobConfirmationLetterUrl),
+      phoneNumber: s.user?.phoneNumber || 'N/A',
+    }));
   }
 
 async updateSubmissionStatus(
@@ -528,7 +526,7 @@ async updateSubmissionStatus(
     );
   }
 
-  const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
+  // Using local storage instead of Supabase
 
   return this.prisma.$transaction(async (prisma) => {
     let jobConfirmationLetterUrl = submission.jobConfirmationLetterUrl;
@@ -555,6 +553,15 @@ async updateSubmissionStatus(
       { text: ``, alignment: 'right', fontSize: 11, margin: [0, 0, 0, 5] },
       { text: ``, alignment: 'right', fontSize: 11, margin: [0, 0, 0, 20] },
       { text: ``, fontSize: 11, margin: [0, 0, 0, 20] },
+             {
+        text: [
+          'Dear ',
+          { text: `${submission.fullName.toUpperCase()},`, bold: true },
+          '\n',
+        ],
+        fontSize: 11,
+        margin: [0, 0, 0, 10],
+      },
       {
         text: `APPOINTMENT – NATIONAL SERVICE ${yearRange}`,
         bold: true,
@@ -644,20 +651,12 @@ async updateSubmissionStatus(
     pdfDoc.getBuffer((buffer: Buffer) => resolve(buffer));
   });
        const fileKeyOutput = `job-confirmation-letters/${submissionId}-${Date.now()}.pdf`;
-      const { error: uploadError } = await supabase.storage
-        .from('killermike')
-        .upload(fileKeyOutput, pdfBuffer as Buffer, {
-          contentType: 'application/pdf',
-          cacheControl: '3600',
-        });
-      if (uploadError) {
-        throw new HttpException(`Failed to upload job confirmation letter: ${uploadError.message}`, HttpStatus.INTERNAL_SERVER_ERROR);
-      }
-      const { data: urlData } = supabase.storage.from('killermike').getPublicUrl(fileKeyOutput);
-      if (!urlData || !urlData.publicUrl) {
-        throw new HttpException('Failed to get public URL for job confirmation letter', HttpStatus.INTERNAL_SERVER_ERROR);
-      }
-      jobConfirmationLetterUrl = urlData.publicUrl;
+      const fs = await import('fs');
+      const path = await import('path');
+      const targetPath = path.join(process.cwd(), 'storage', fileKeyOutput);
+      await fs.promises.mkdir(path.dirname(targetPath), { recursive: true });
+      await fs.promises.writeFile(targetPath, pdfBuffer as Buffer);
+      jobConfirmationLetterUrl = `/files/${fileKeyOutput}`;
     }
 
     const updatedSubmission = await prisma.submission.update({
@@ -800,6 +799,7 @@ async updateSubmissionStatus(
       name: true,
       staffId: true,
       email: true,
+      phoneNumber: true,
       role: true,
       departmentsSupervised: {
       select: {
@@ -914,7 +914,7 @@ async updateSubmissionStatus(
   }
   const currentYear = new Date().getFullYear();
 
-  return this.prisma.user.findMany({
+  const users = await this.prisma.user.findMany({
     where: {
       role: 'PERSONNEL',
       deletedAt: null,
@@ -979,6 +979,16 @@ async updateSubmissionStatus(
     },
     orderBy: { createdAt: 'desc' },
    });
+   return users.map((u) => ({
+     ...u,
+     submissions: u.submissions.map((s) => ({
+       ...s,
+       postingLetterUrl: this.toAbsoluteFileUrl((s as any).postingLetterUrl),
+       appointmentLetterUrl: this.toAbsoluteFileUrl((s as any).appointmentLetterUrl),
+       verificationFormUrl: this.toAbsoluteFileUrl((s as any).verificationFormUrl),
+       jobConfirmationLetterUrl: this.toAbsoluteFileUrl((s as any).jobConfirmationLetterUrl),
+     })),
+   }));
   }
 
  async assignPersonnelToDepartment(requesterId: number, dto: AssignPersonnelToDepartmentDto) {

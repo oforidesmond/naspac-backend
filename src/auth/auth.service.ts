@@ -175,7 +175,7 @@ async loginStaffAdmin(staffId: string, password: string) {
     return { success: true, userId: user.id, role: user.role, email: user.email, name: user.name };
   }
 
- async initOnboarding(nssNumber: string, email: string, initiatedBy: { id: number; role: string }) {
+ async initOnboarding(nssNumber: string, email: string, initiatedBy: { id: number; role: string }, phoneNumber: string) {
     if (!['STAFF', 'ADMIN'].includes(initiatedBy.role)) {
       throw new HttpException('Unauthorized: Only staff or admins can initiate onboarding', HttpStatus.FORBIDDEN);
     }
@@ -194,6 +194,7 @@ async loginStaffAdmin(staffId: string, password: string) {
     const user = await this.usersService.createUser({
       nssNumber: nssNumberWithYear,
       email,
+      phoneNumber,
       role: 'PERSONNEL',
     });
 

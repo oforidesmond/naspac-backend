@@ -68,7 +68,7 @@ export class AuthController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('STAFF', 'ADMIN')
   async initOnboarding(@Body() body: InitOnboardingDto, @Request() req) {
-    return this.authService.initOnboarding(body.nssNumber, body.email, req.user);
+    return this.authService.initOnboarding(body.nssNumber, body.email, req.user, body.phoneNumber);
   }
   
     @Post('init-user')

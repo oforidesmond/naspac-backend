@@ -7,14 +7,14 @@ import { RolesGuard } from 'src/common/guards/roles-guard';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { GetSubmissionStatusCountsDto, SubmitOnboardingDto, UpdateSubmissionStatusDto } from './dto/submit-onboarding.dto';
 import { RateLimitGuard } from 'src/auth/rate-limit.guard';
-import { SupabaseStorageService } from 'src/documents/supabase-storage.service';
+import { LocalStorageService } from 'src/documents/local-storage.service';
 import { PrismaService } from 'prisma/prisma.service';
 import { UpdateStaffDto } from './dto/update-user.dto';
 
 @Controller('users')
 export class UsersController {
   constructor(
-    private supabaseStorageService: SupabaseStorageService,
+    private localStorageService: LocalStorageService,
     private prisma: PrismaService,
     private usersService: UsersService,
   ) {}
@@ -62,17 +62,17 @@ async getUserProfile(@Request() req) {
     }
 
     const signatureFileName = `signatures/admin-${adminId}-signature-${Date.now()}.png`;
-    const signatureUrl = await this.supabaseStorageService.uploadFile(
+    const signatureUrl = await this.localStorageService.uploadFile(
       signatureFile.buffer,
       signatureFileName,
-      'killermike',
+      'local',
     );
 
     const stampFileName = `stamps/admin-${adminId}-stamp-${Date.now()}.png`;
-    const stampUrl = await this.supabaseStorageService.uploadFile(
+    const stampUrl = await this.localStorageService.uploadFile(
       stampFile.buffer,
       stampFileName,
-      'killermike',
+      'local',
     );
 
     await this.prisma.user.update({

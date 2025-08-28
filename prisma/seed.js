@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import { authenticator } from 'otplib';
 
 const prisma = new PrismaClient();
 
@@ -10,24 +11,16 @@ async function main() {
   await prisma.user.deleteMany();
 
   // Seed Admins
-  await prisma.user.createMany({
-    data: [
-      {
-        name: 'Admin One',
-        staffId: 'admin123',
-        email: 'admin1@cocobod.gh',
-        phoneNumber: '+233557484584',
-        password: await bcrypt.hash('admin123', 10),
-        role: 'ADMIN',
-      },
-      // {
-      //   name: 'Admin Two',
-      //   staffId: 'staff002',
-      //   email: 'admin2@cocobod.gh',
-      //   password: await bcrypt.hash('admin123', 10),
-      //   role: 'ADMIN',
-      // },
-    ],
+   await prisma.user.create({
+    data: {
+      name: 'Admin One',
+      staffId: 'admin123',
+      email: 'admin1@cocobod.gh',
+      phoneNumber: '+233557484584',
+      password: await bcrypt.hash('admin123', 10),
+      role: 'ADMIN',
+      tfaSecret: authenticator.generateSecret(),
+    },
   });
 
   // // Seed Staff

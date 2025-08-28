@@ -16,6 +16,7 @@ async function main() {
         name: 'Admin One',
         staffId: 'admin123',
         email: 'admin1@cocobod.gh',
+        phoneNumber: '+233557484584',
         password: await bcrypt.hash('admin123', 10),
         role: 'ADMIN',
       },

@@ -17,4 +17,8 @@ export class UpdateStaffDto {
   @IsOptional()
   @IsEnum(Role)
   role?: Role;
+
+  @IsOptional()
+  @IsString()
+  phoneNumber?: string;
 }

@@ -24,6 +24,9 @@ export class AuthService {
     if (!user) {
       throw new HttpException('Invalid staff ID or password', HttpStatus.UNAUTHORIZED);
     }
+      if (user.deletedAt !== null) {
+    throw new HttpException('Account is disabled. Please contact support.', HttpStatus.UNAUTHORIZED);
+  }
 
     if (user.role !== 'STAFF' && user.role !== 'ADMIN' && user.role !== 'SUPERVISOR') {
       throw new HttpException(
@@ -60,7 +63,9 @@ export class AuthService {
       HttpStatus.FORBIDDEN,
     );
   }
-
+  if (user.deletedAt !== null) {
+    throw new HttpException('Account is disabled. Please contact support.', HttpStatus.UNAUTHORIZED);
+  }
   const isPasswordValid = await bcrypt.compare(password, user.password);
   if (!isPasswordValid) {
     throw new HttpException('Invalid NSS number or password', HttpStatus.UNAUTHORIZED);
@@ -187,7 +192,9 @@ async loginStaffAdmin(staffId: string, password: string) {
     if (existingUser) {
       throw new HttpException('NSS number already registered', HttpStatus.BAD_REQUEST);
     }
-
+    if (existingUser.deletedAt !== null) {
+      throw new HttpException('Account is disabled. Please contact support.', HttpStatus.UNAUTHORIZED);
+    }
     const currentYear = new Date().getFullYear();
     const nssNumberWithYear = `${nssNumber}${currentYear}`;
 
@@ -253,7 +260,9 @@ async loginStaffAdmin(staffId: string, password: string) {
     if (!user) {
       return { message: 'If an account exists, a reset link will be sent' };
     }
-
+    if (user.deletedAt !== null) {
+      throw new HttpException('Account is disabled. Please contact support.', HttpStatus.UNAUTHORIZED);
+    }
     const token = crypto.randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + 1 * 60 * 60 * 1000); // 1 hour expiry
 

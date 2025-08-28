@@ -123,13 +123,13 @@ async createUser(dto: CreateUserDto) {
 
    async findByStaffId(staffId: string) {
     return this.prisma.user.findUnique({
-      where: { staffId },
+      where: { staffId, deletedAt: null },
     });
   }
 
   async findByNssNumber(nssNumber: string) {
     return this.prisma.user.findUnique({
-      where: { nssNumber },
+      where: { nssNumber, deletedAt: null },
     });
   }
 
@@ -140,28 +140,29 @@ async createUser(dto: CreateUserDto) {
         OR: [
           { nssNumber: identifier },
           { staffId: identifier },
+          { deletedAt: null },
         ],
       },
     });
   }
 
   async findById(id: number) {
-    return this.prisma.user.findUnique({ where: { id } });
+    return this.prisma.user.findUnique({ where: { id, deletedAt: null } });
   }
 
    async updateUser(id: number, data: Partial<{ email: string; password: string; tfaSecret: string; phoneNumber: string }>) {
     if (data.password) {
       data.password = await bcrypt.hash(data.password, 10);
     }
-    return this.prisma.user.update({ where: { id }, data });
+    return this.prisma.user.update({ where: { id, deletedAt: null }, data });
   }
 
   async findByEmail(email: string) {
-  return this.prisma.user.findUnique({ where: { email } });
+  return this.prisma.user.findUnique({ where: { email, deletedAt: null } });
   }
 
  async submitOnboarding(userId: number, dto: SubmitOnboardingDto, files: { postingLetter?: Express.Multer.File; appointmentLetter?: Express.Multer.File }) {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const user = await this.prisma.user.findUnique({ where: { id: userId, deletedAt: null } });
     if (!user || user.role !== 'PERSONNEL' || user.nssNumber !== dto.nssNumber) {
       throw new HttpException('Unauthorized or invalid NSS number', HttpStatus.FORBIDDEN);
     }
@@ -213,7 +214,7 @@ async createUser(dto: CreateUserDto) {
 
   return this.prisma.$transaction(async (prisma) => {
     await prisma.user.update({
-      where: { id: userId },
+      where: { id: userId, deletedAt: null },
       data: {
         name: dto.fullName,
         email: dto.email,
@@ -425,7 +426,7 @@ async createUser(dto: CreateUserDto) {
 
    async getOnboardingStatus(userId: number) {
     const submission = await this.prisma.submission.findFirst({
-      where: { userId },
+      where: { userId, deletedAt: null },
     });
     return { hasSubmitted: !!submission };
   }
@@ -435,6 +436,7 @@ async createUser(dto: CreateUserDto) {
     const submissions = await this.prisma.submission.findMany({
         where: {
       yearOfNss: currentYear,
+      deletedAt: null,
     },
       select: {
         id: true,
@@ -476,6 +478,7 @@ async createUser(dto: CreateUserDto) {
 
   async getSubmissions() {
     const submissions = await this.prisma.submission.findMany({
+      where: { deletedAt: null },
       select: {
         id: true,
         fullName: true,
@@ -519,7 +522,7 @@ async updateSubmissionStatus(
   submissionId: number,
   dto: UpdateSubmissionStatusDto,
 ) {
-  const user = await this.prisma.user.findUnique({ where: { id: userId } });
+  const user = await this.prisma.user.findUnique({ where: { id: userId, deletedAt: null } });
   if (!user || !['ADMIN', 'STAFF'].includes(user.role)) {
     throw new HttpException('Unauthorized: Only ADMIN or STAFF can update submission status', HttpStatus.FORBIDDEN);
   }
@@ -685,7 +688,7 @@ async updateSubmissionStatus(
     }
 
     const updatedSubmission = await prisma.submission.update({
-      where: { id: submissionId },
+      where: { id: submissionId, deletedAt: null },
       data: {
         status: dto.status,
         jobConfirmationLetterUrl,
@@ -743,7 +746,7 @@ async updateSubmissionStatus(
 }
 
   async getSubmissionStatusCounts(userId: number, dto: GetSubmissionStatusCountsDto) {
-  const user = await this.prisma.user.findUnique({ where: { id: userId } });
+  const user = await this.prisma.user.findUnique({ where: { id: userId, deletedAt: null } });
   if (!user || !['ADMIN', 'STAFF'].includes(user.role)) {
     throw new HttpException(
       'Unauthorized: Only ADMIN or STAFF can access submission status counts',
@@ -804,7 +807,7 @@ async updateSubmissionStatus(
  }
 
  async getStaff(requesterId: number) {
-  const requester = await this.prisma.user.findUnique({ where: { id: requesterId } });
+  const requester = await this.prisma.user.findUnique({ where: { id: requesterId, deletedAt: null } });
   if (!requester || !['ADMIN', 'STAFF'].includes(requester.role)) {
     throw new HttpException(
       'Unauthorized: Only admins or staff can access staff, admin, and supervisor data',
@@ -842,17 +845,17 @@ async updateSubmissionStatus(
  }
 
  async createDepartment(requesterId: number, dto: CreateDepartmentDto) {
-  const requester = await this.prisma.user.findUnique({ where: { id: requesterId } });
+  const requester = await this.prisma.user.findUnique({ where: { id: requesterId, deletedAt: null } });
   if (!requester || !['ADMIN', 'STAFF'].includes(requester.role)) {
     throw new HttpException('Unauthorized: Only admins and staff can create departments', HttpStatus.FORBIDDEN);
   }
 
-  const supervisor = await this.prisma.user.findUnique({ where: { id: dto.supervisorId } });
+  const supervisor = await this.prisma.user.findUnique({ where: { id: dto.supervisorId, deletedAt: null } });
   if (!supervisor || supervisor.role !== 'SUPERVISOR' || supervisor.deletedAt) {
     throw new HttpException('Invalid or deleted supervisor', HttpStatus.BAD_REQUEST);
   }
 
-  const existingDepartment = await this.prisma.department.findUnique({ where: { name: dto.name } });
+  const existingDepartment = await this.prisma.department.findUnique({ where: { name: dto.name, deletedAt: null } });
   if (existingDepartment) {
     throw new HttpException('Department name already exists', HttpStatus.BAD_REQUEST);
   }
@@ -907,7 +910,7 @@ async updateSubmissionStatus(
  }
 
  async getDepartments(requesterId: number) {
-  const requester = await this.prisma.user.findUnique({ where: { id: requesterId } });
+  const requester = await this.prisma.user.findUnique({ where: { id: requesterId, deletedAt: null } });
   if (!requester || !['ADMIN', 'STAFF'].includes(requester.role)) {
     throw new HttpException('Unauthorized: Only admins or staff can access departments', HttpStatus.FORBIDDEN);
   }
@@ -930,7 +933,7 @@ async updateSubmissionStatus(
   }
 
   async getPersonnel(requesterId: number, dto: GetPersonnelDto) {
-  const requester = await this.prisma.user.findUnique({ where: { id: requesterId } });
+  const requester = await this.prisma.user.findUnique({ where: { id: requesterId, deletedAt: null } });
   if (!requester || !['ADMIN', 'STAFF'].includes(requester.role)) {
     throw new HttpException(
       'Unauthorized: Only admins or staff can access personnel data',
@@ -1017,8 +1020,8 @@ async updateSubmissionStatus(
   }
 
  async assignPersonnelToDepartment(requesterId: number, dto: AssignPersonnelToDepartmentDto) {
-  const requester = await this.prisma.user.findUnique({ 
-    where: { id: requesterId },
+  const requester = await this.prisma.user.findUnique({
+    where: { id: requesterId, deletedAt: null },
     select: { id: true, role: true },
   });
   if (!requester || !['ADMIN', 'STAFF'].includes(requester.role)) {
@@ -1114,7 +1117,7 @@ async updateSubmissionStatus(
   async getReportCounts(requesterId?: number) {
   if (requesterId) {
     const requester = await this.prisma.user.findUnique({
-      where: { id: requesterId },
+      where: { id: requesterId, deletedAt: null },
       select: { id: true, role: true },
     });
     if (!requester || !['ADMIN', 'STAFF'].includes(requester.role)) {
@@ -1300,7 +1303,7 @@ async updateSubmissionStatus(
 
   async updateStaff(staffId: number, dto: UpdateStaffDto, requesterId: number) {
   const requester = await this.prisma.user.findUnique({
-    where: { id: requesterId },
+    where: { id: requesterId, deletedAt: null },
     select: { role: true },
   });
   if (!requester || requester.role !== 'ADMIN') {
@@ -1327,8 +1330,9 @@ async updateSubmissionStatus(
         email: dto.email,
         role: dto.role,
         updatedAt: new Date(),
+        phoneNumber: dto.phoneNumber,
       },
-      select: { id: true, name: true, staffId: true, email: true, role: true },
+      select: { id: true, name: true, staffId: true, email: true, role: true, phoneNumber: true },
     });
 
     await prisma.auditLog.create({
@@ -1368,7 +1372,7 @@ async updateSubmissionStatus(
 
 async updateDepartment(departmentId: number, dto: UpdateDepartmentDto, requesterId: number) {
   const requester = await this.prisma.user.findUnique({
-    where: { id: requesterId },
+    where: { id: requesterId, deletedAt: null },
     select: { role: true },
   });
   if (!requester || requester.role !== 'ADMIN') {
@@ -1443,7 +1447,7 @@ async updateDepartment(departmentId: number, dto: UpdateDepartmentDto, requester
 
   async deleteStaff(staffId: number, requesterId: number) {
   const requester = await this.prisma.user.findUnique({
-    where: { id: requesterId },
+    where: { id: requesterId, deletedAt: null },
     select: { role: true },
   });
   if (!requester || requester.role !== 'ADMIN') {
@@ -1515,7 +1519,7 @@ async updateDepartment(departmentId: number, dto: UpdateDepartmentDto, requester
 
   async deleteDepartment(departmentId: number, requesterId: number) {
   const requester = await this.prisma.user.findUnique({
-    where: { id: requesterId },
+    where: { id: requesterId, deletedAt: null },
     select: { role: true },
   });
   if (!requester || requester.role !== 'ADMIN') {
@@ -1586,7 +1590,7 @@ async updateDepartment(departmentId: number, dto: UpdateDepartmentDto, requester
 
   async changePersonnelDepartment(dto: ChangePersonnelDepartmentDto, requesterId: number) {
   const requester = await this.prisma.user.findUnique({
-    where: { id: requesterId },
+    where: { id: requesterId, deletedAt: null },
     select: { role: true },
   });
  if (!requester || !['ADMIN', 'STAFF'].includes(requester.role)) {
@@ -1657,6 +1661,6 @@ async updateDepartment(departmentId: number, dto: UpdateDepartmentDto, requester
   }
 
   async findByPhoneNumber(phoneNumber: string) {
-    return this.prisma.user.findFirst({ where: { phoneNumber } });
+    return this.prisma.user.findFirst({ where: { phoneNumber, deletedAt: null } });
   }
 }

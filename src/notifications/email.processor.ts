@@ -18,7 +18,7 @@ export class EmailProcessor {
   async sendEmail(job: Job<{ to: string; subject: string; content: string }>) {
     try {
       await this.transporter.sendMail({
-        from: '"COCOBOD Onboarding" <no-reply@yourdomain.com>',
+        from: '"COCOBOD Onboarding"',
         to: job.data.to,
         subject: job.data.subject,
         html: job.data.content,

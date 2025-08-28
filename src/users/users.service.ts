@@ -16,10 +16,35 @@ import * as pdfFonts from 'pdfmake/build/vfs_fonts';
 import * as fs from 'fs';
 import * as path from 'path';
 
+// function getBase64Image(filePath: string): string {
+//   const absPath = path.resolve(filePath);
+//   const file = fs.readFileSync(absPath);
+//   return file.toString('base64');
+// }
+
+
 function getBase64Image(filePath: string): string {
-  const absPath = path.resolve(filePath);
-  const file = fs.readFileSync(absPath);
-  return file.toString('base64');
+  // Try different possible locations
+  const possiblePaths = [
+    path.resolve(filePath), // Original relative path
+    path.resolve('src', filePath), // Development path
+    path.resolve('dist/src', filePath), // Production path
+    path.resolve(process.cwd(), filePath), // Current working directory
+    path.resolve(process.cwd(), 'src', filePath), // CWD + src
+  ];
+
+  for (const absPath of possiblePaths) {
+    try {
+      if (fs.existsSync(absPath)) {
+        const file = fs.readFileSync(absPath);
+        return file.toString('base64');
+      }
+    } catch (error) {
+      // Continue to next path
+    }
+  }
+  
+  throw new Error(`Could not find file: ${filePath}. Tried paths: ${possiblePaths.join(', ')}`);
 }
 
 (pdfMake as any).vfs = pdfFonts.vfs;

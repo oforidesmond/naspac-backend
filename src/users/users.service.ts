@@ -140,7 +140,7 @@ async createUser(dto: CreateUserDto) {
         OR: [
           { nssNumber: identifier },
           { staffId: identifier },
-          { deletedAt: null },
+          // { deletedAt: null },
         ],
       },
     });

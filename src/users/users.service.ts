@@ -1317,8 +1317,8 @@ async updateSubmissionStatus(
   if (!staff || staff.deletedAt) {
     throw new HttpException('Staff user not found or deleted', HttpStatus.NOT_FOUND);
   }
-  if (!['ADMIN', 'STAFF'].includes(staff.role)) {
-    throw new HttpException('Can only update ADMIN or STAFF users', HttpStatus.BAD_REQUEST);
+  if (!['ADMIN', 'STAFF', 'SUPERVISOR'].includes(staff.role)) {
+    throw new HttpException('Can only update ADMIN, STAFF or SUPERVISOR users', HttpStatus.BAD_REQUEST);
   }
 
   return this.prisma.$transaction(async (prisma) => {
@@ -1461,8 +1461,8 @@ async updateDepartment(departmentId: number, dto: UpdateDepartmentDto, requester
   if (!staff || staff.deletedAt) {
     throw new HttpException('Staff user not found or already deleted', HttpStatus.NOT_FOUND);
   }
-  if (!['ADMIN', 'STAFF'].includes(staff.role)) {
-    throw new HttpException('Can only delete ADMIN or STAFF users', HttpStatus.BAD_REQUEST);
+  if (!['ADMIN', 'STAFF', 'SUPERVISOR'].includes(staff.role)) {
+    throw new HttpException('Can only delete ADMIN, STAFF or SUPERVISOR users', HttpStatus.BAD_REQUEST);
   }
   if (staffId === requesterId) {
     throw new HttpException('Cannot delete your own account', HttpStatus.BAD_REQUEST);

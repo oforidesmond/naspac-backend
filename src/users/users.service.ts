@@ -31,6 +31,7 @@ function getBase64Image(filePath: string): string {
     path.resolve('dist/src', filePath), // Production path
     path.resolve(process.cwd(), filePath), // Current working directory
     path.resolve(process.cwd(), 'src', filePath), // CWD + src
+    path.resolve(process.cwd(), 'storage', filePath),
   ];
 
   for (const absPath of possiblePaths) {
@@ -50,7 +51,7 @@ function getBase64Image(filePath: string): string {
 (pdfMake as any).vfs = pdfFonts.vfs;
 
 const letterheadBase64 = getBase64Image('src/assets/letterhead.png');
-const signatureBase64 = getBase64Image('src/assets/signature.png');
+// const signatureBase64 = getBase64Image('src/assets/signature.png');
 
 const fonts = {
   Roboto: {
@@ -106,7 +107,9 @@ export class UsersService {
 }
 
 async createUser(dto: CreateUserDto) {
-  const hashedPassword = dto.password ? await bcrypt.hash(dto.password, 10) : null;
+ const hashedPassword = dto.password ? await bcrypt.hash(dto.password, 10) : null;
+  const isTfaEnabled = dto.role === 'PERSONNEL' ? true : !!dto.enable2FA; // Enforce for PERSONNEL
+  const tfaSecret = isTfaEnabled ? authenticator.generateSecret() : null;
   return this.prisma.user.create({
     data: {
       nssNumber: dto.nssNumber ?? null,
@@ -116,7 +119,8 @@ async createUser(dto: CreateUserDto) {
       phoneNumber: dto.phoneNumber ?? null,
       password: hashedPassword,
       role: dto.role,
-      tfaSecret: authenticator.generateSecret(),
+     tfaSecret,
+      isTfaEnabled,
     },
   });
 }
@@ -564,8 +568,20 @@ async updateSubmissionStatus(
        const currentYear = new Date().getFullYear();
       const yearRange = currentYear === 2025 ? '2024/2025' : `${currentYear}/${currentYear + 1}`;
       const nextYear = currentYear + 1;
-      const today = moment().format('YYYY-MM-DD');
+      const today = moment().format('DD/MM/YYYY');
       const departmentName = submission.user.department.name;
+
+        // Fetch the signature from storage
+      const signaturePath = `signatures/user-${userId}-signature.png`;
+      let signatureBase64;
+      try {
+        signatureBase64 = getBase64Image(signaturePath);
+      } catch (error) {
+        throw new HttpException(
+          `Failed to load signature for user ${userId}: ${error.message}`,
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      }
 
       // Define PDF document
       const docDefinition = {
@@ -581,22 +597,30 @@ async updateSubmissionStatus(
       { text: ``, alignment: 'right', fontSize: 11, margin: [0, 0, 0, 5] },
       { text: ``, alignment: 'right', fontSize: 11, margin: [0, 0, 0, 20] },
       { text: ``, fontSize: 11, margin: [0, 0, 0, 20] },
+        {
+          text: today,
+          alignment: 'right',
+          fontSize: 11,
+          margin: [0, 0, 0, 10],
+        },
              {
         text: [
-          'Dear ',
-          { text: `${submission.fullName.toUpperCase()},`, bold: true },
+          { text: `${submission.fullName.toUpperCase()}`, bold: true },
           '\n',
+          { text: `NATIONAL SERVICE PERSON`, bold: true },
+          '\n\n',
+          { text: `TEL: ${submission.phoneNumber}`, bold: true  },
         ],
         fontSize: 11,
-        margin: [0, 0, 0, 10],
+        margin: [0, 20, 0, 5],
       },
       {
         text: `APPOINTMENT – NATIONAL SERVICE ${yearRange}`,
         bold: true,
         fontSize: 12,
-        alignment: 'center',
+        alignment: 'left',
         decoration: 'underline',
-        margin: [0, 50, 0, 20],
+        margin: [0, 10, 0, 20],
       },
       {
         text: [
@@ -611,7 +635,15 @@ async updateSubmissionStatus(
       },
       {
         text: [
-          'You will be subjected to Ghana Cocoa Board will pay your National Service Allowance of ',
+          'You will be subjected to Ghana Cocoa Board and National Service rules and regulations during',
+          'your service year.',
+        ],
+        fontSize: 11,
+        margin: [0, 0, 0, 10],
+      },
+        {
+        text: [
+          'Ghana Cocoa Board will pay your National Service Allowance of ',
           { text: 'Seven Hundred and Fifteen Ghana Cedis, Fifty-Seven Pesewas (GHc 715.57)', bold: true },
           ' per month.',
         ],
@@ -624,7 +656,7 @@ async updateSubmissionStatus(
         margin: [0, 0, 0, 10],
       },
       {
-        text: 'We hope you will work diligently and comport yourself during the period of your Service with the Board.',
+        text: 'We hope you will work diligently and comport yourself during the period for our mutual benefit.',
         fontSize: 11,
         margin: [0, 0, 0, 10],
       },
@@ -632,6 +664,7 @@ async updateSubmissionStatus(
         text: 'Kindly report with your Bank Account Details either on a bank statement, copy of cheque leaflet or pay-in-slip.',
         fontSize: 11,
         margin: [0, 0, 0, 10],
+        bold: true,
       },
       {
         text: [
@@ -643,9 +676,9 @@ async updateSubmissionStatus(
         margin: [0, 0, 0, 10],
       },
       {
-        text: 'Please report to the undersigned for further directives.\n\nYou can count on our co-operation.',
+        text: 'Please report to the undersigned for further directives.\nYou can count on our co-operation.',
         fontSize: 11,
-        margin: [0, 0, 0, 20],
+        margin: [0, 0, 0, 10],
       },
        {
       image: 'signature',
@@ -655,11 +688,8 @@ async updateSubmissionStatus(
     },
 
       { text: 'PAZ OWUSU BOAKYE (MRS.)', bold: true, fontSize: 11, margin: [0, 0, 0, 5] },
-      { text: 'DEPUTY DIRECTOR, HUMAN RESOURCE', fontSize: 11, margin: [0, 0, 0, 20] },
-      {
-        text: 'cc:  Director, Human Resource\n      Director, Finance\n      Info. Systems Manager\n      HUMAN RESOURCE DEPARTMENT',
-        fontSize: 11,
-      },
+      { text: 'DEPUTY DIRECTOR, HUMAN RESOURCE', fontSize: 11, margin: [0, 0, 0, 10] },
+      { text: 'FOR: DIRECTOR, HUMAN RESOURCE\n cc:  Director, Human Resource\n Director, Finance\n Info. Systems Manager\n', fontSize: 11, margin: [0, 0, 0, 0] },
     ],
     
       images: {
@@ -743,6 +773,33 @@ async updateSubmissionStatus(
 
     return updatedSubmission;
   }, { timeout: 20000 });
+}
+
+// New endpoint to handle signature upload for appointment letter
+async uploadAppointmentSignature(userId: number, file: Express.Multer.File) {
+  const user = await this.prisma.user.findUnique({ where: { id: userId, deletedAt: null } });
+  if (!user || !['ADMIN', 'STAFF'].includes(user.role)) {
+    throw new HttpException('Unauthorized: Only ADMIN or STAFF can upload signatures', HttpStatus.FORBIDDEN);
+  }
+
+  // Validate file type
+  const allowedTypes = ['image/png', 'image/jpeg'];
+  if (!allowedTypes.includes(file.mimetype)) {
+    throw new HttpException('Only PNG or JPEG files are allowed', HttpStatus.BAD_REQUEST);
+  }
+
+  // Save signature to local storage
+  const signaturePath = path.join(process.cwd(), 'storage', 'signatures', `user-${userId}-signature.png`);
+  await fs.promises.mkdir(path.dirname(signaturePath), { recursive: true });
+  await fs.promises.writeFile(signaturePath, file.buffer);
+
+  // Optionally, store a reference in the database
+  await this.prisma.user.update({
+    where: { id: userId },
+    data: { signaturePath: `/signatures/user-${userId}-signature.png` },
+  });
+
+  return { message: 'Signature uploaded successfully' };
 }
 
   async getSubmissionStatusCounts(userId: number, dto: GetSubmissionStatusCountsDto) {
@@ -837,6 +894,7 @@ async updateSubmissionStatus(
       },
       department: { select: { id: true, name: true } },
       unit: { select: { id: true, name: true } },
+      isTfaEnabled: true,
       createdAt: true,
       updatedAt: true,
     },
@@ -1312,7 +1370,7 @@ async updateSubmissionStatus(
 
   const staff = await this.prisma.user.findUnique({
     where: { id: staffId },
-    select: { id: true, role: true, deletedAt: true },
+    select: { id: true, role: true, deletedAt: true, email: true, phoneNumber: true, isTfaEnabled: true },
   });
   if (!staff || staff.deletedAt) {
     throw new HttpException('Staff user not found or deleted', HttpStatus.NOT_FOUND);
@@ -1321,34 +1379,70 @@ async updateSubmissionStatus(
     throw new HttpException('Can only update ADMIN, STAFF or SUPERVISOR users', HttpStatus.BAD_REQUEST);
   }
 
+  // Validate phoneNumber if enable2FA is true
+  if (dto.enable2FA && (!dto.phoneNumber || !/^\+\d{10,15}$/.test(dto.phoneNumber))) {
+    throw new HttpException(
+      'Valid phone number with country code required when enabling 2FA (e.g., +233557484584)',
+      HttpStatus.BAD_REQUEST
+    );
+  }
+
   return this.prisma.$transaction(async (prisma) => {
+    const updateData: any = {
+      name: dto.name,
+      staffId: dto.staffId,
+      email: dto.email,
+      role: dto.role,
+      phoneNumber: dto.phoneNumber,
+      updatedAt: new Date(),
+    };
+
+    // Handle 2FA updates
+    if (dto.enable2FA !== undefined) {
+      updateData.isTfaEnabled = dto.enable2FA;
+      if (dto.enable2FA && !staff.isTfaEnabled) {
+        updateData.tfaSecret = authenticator.generateSecret(); // Generate new tfaSecret if enabling 2FA
+      } else if (!dto.enable2FA && staff.isTfaEnabled) {
+        updateData.tfaSecret = null; // Clear tfaSecret if disabling 2FA
+      }
+    }
+
     const updatedStaff = await prisma.user.update({
       where: { id: staffId },
-      data: {
-        name: dto.name,
-        staffId: dto.staffId,
-        email: dto.email,
-        role: dto.role,
-        updatedAt: new Date(),
-        phoneNumber: dto.phoneNumber,
-      },
-      select: { id: true, name: true, staffId: true, email: true, role: true, phoneNumber: true },
+      data: updateData,
+      select: { id: true, name: true, staffId: true, email: true, role: true, phoneNumber: true, isTfaEnabled: true },
     });
+
+    // Log 2FA status in audit log
+    const auditDetails = `Admin (ID: ${requesterId}) updated staff (ID: ${staffId}, Email: ${updatedStaff.email}). Updated fields: ${
+      dto.name ? `Name: ${dto.name}, ` : ''
+    }${dto.staffId ? `StaffId: ${dto.staffId}, ` : ''}${dto.email ? `Email: ${dto.email}, ` : ''}${
+      dto.role ? `Role: ${dto.role}, ` : ''
+    }${dto.phoneNumber ? `PhoneNumber: ${dto.phoneNumber}, ` : ''}${
+      dto.enable2FA !== undefined ? `2FA: ${dto.enable2FA ? 'Enabled' : 'Disabled'}` : ''
+    }`;
 
     await prisma.auditLog.create({
       data: {
         submissionId: null,
         action: 'STAFF_UPDATED',
         userId: requesterId,
-        details: `Admin (ID: ${requesterId}) updated staff (ID: ${staffId}, Email: ${updatedStaff.email})`,
+        details: auditDetails,
         createdAt: new Date(),
       },
     });
 
+    // Notify user of profile update, including 2FA status
+    const notificationDescription = `Your profile has been updated by admin. New details: ${
+      dto.name ? `Name: ${dto.name}, ` : ''
+    }${dto.email ? `Email: ${dto.email}, ` : ''}${dto.role ? `Role: ${dto.role}, ` : ''}${
+      dto.phoneNumber ? `PhoneNumber: ${dto.phoneNumber}, ` : ''
+    }${dto.enable2FA !== undefined ? `2FA: ${dto.enable2FA ? 'Enabled' : 'Disabled'}` : ''}.`;
+
     await prisma.notification.create({
       data: {
         title: 'Profile Updated',
-        description: `Your profile has been updated by admin. New details: Name - ${dto.name || updatedStaff.name}, Email - ${dto.email || updatedStaff.email}, Role - ${dto.role || updatedStaff.role}.`,
+        description: notificationDescription,
         timestamp: new Date(),
         iconType: 'USER',
         role: updatedStaff.role,

@@ -1,4 +1,4 @@
-import { Controller, Post, Body, UseGuards, UseInterceptors, UploadedFiles, Request, Get, ParseIntPipe, Param, HttpException, HttpStatus, UploadedFile, Patch, Delete } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, UseInterceptors, UploadedFiles, Request, Get, ParseIntPipe, Param, HttpException, HttpStatus, UploadedFile, Patch, Delete, Req } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { AssignPersonnelToDepartmentDto, ChangePersonnelDepartmentDto, CreateDepartmentDto, CreateUserDto, GetPersonnelDto, UpdateDepartmentDto } from './dto/create-user.dto';
 import { Roles } from 'src/common/decorators/roles.decorator';
@@ -289,5 +289,19 @@ async updateDepartment(
     @Request() req,
   ) {
     return this.usersService.changePersonnelDepartment(dto, req.user.id);
+  }
+
+    @Post('upload-appointment-signature')
+  @UseGuards(JwtAuthGuard)
+  @UseInterceptors(FileInterceptor('signature'))
+  async uploadAppointmentSignature(
+    @Req() request: any,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    const userId = request.user?.id;
+    if (!userId) {
+      throw new HttpException('User ID not found in request', HttpStatus.UNAUTHORIZED);
+    }
+    return this.usersService.uploadAppointmentSignature(userId, file);
   }
 }

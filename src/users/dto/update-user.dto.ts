@@ -21,4 +21,7 @@ export class UpdateStaffDto {
   @IsOptional()
   @IsString()
   phoneNumber?: string;
+
+  @IsOptional()
+  enable2FA?: boolean;
 }

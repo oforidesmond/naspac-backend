@@ -19,12 +19,14 @@ model User {
   sigWidth            Int?   
   staffId             String?       @unique
   email               String?       @unique
+  signaturePath       String?
   phoneNumber         String?
   tfaSecret           String?
+  isTfaEnabled        Boolean       @default(false) // Added to track 2FA status
   password            String?
   role                Role          @default(PERSONNEL)
   departmentId        Int?    
-  unitId             Int?        
+  unitId              Int?        
   supervisorId        Int?        
   createdAt           DateTime      @default(now())
   updatedAt           DateTime      @updatedAt
@@ -39,7 +41,7 @@ model User {
   supervisedPersonnel User[]        @relation("SupervisorPersonnel")
   departmentsSupervised Department[] @relation("DepartmentSupervisor")
   templatesCreated    Template[]    @relation("UserTemplates")
-  notifications  Notification[] 
+  notifications       Notification[] 
 }
 
 model Submission {

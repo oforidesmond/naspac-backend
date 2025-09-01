@@ -162,4 +162,26 @@ export class NotificationsService {
       },
     );
   }
+
+  async sendOtpEmail(to: string, name: string, otp: string) {
+    await this.emailQueue.add(
+      'send-email',
+      {
+        to,
+        subject: 'NASPAC OTP Verification',
+        content: `
+          <h1>OTP Verification Code</h1>
+          <p>Dear ${name},</p>
+          <p>Your OTP verification code is: <strong>${otp}</strong></p>
+          <p>This code expires in 3 minutes. Please enter it in your dashboard to complete the verification process.</p>
+          <p>If you did not request this code, please ignore this email and contact support immediately.</p>
+          <p>Best regards,<br>NASPAC Team</p>
+        `,
+      },
+      {
+        attempts: 3,
+        backoff: 5000,
+      },
+    );
+  }
 }

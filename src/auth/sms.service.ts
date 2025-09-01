@@ -5,6 +5,7 @@ import { ConfigService } from '@nestjs/config';
 import { lastValueFrom } from 'rxjs';
 import { UsersService } from 'src/users/users.service';
 import { PrismaService } from 'prisma/prisma.service';
+import { NotificationsService } from 'src/notifications/notifications.service';
 
 @Injectable()
 export class SmsService {
@@ -13,6 +14,7 @@ export class SmsService {
     private httpService: HttpService,
     private configService: ConfigService,
     private prisma: PrismaService,
+    private notificationsService: NotificationsService,
   ) {
     authenticator.options = { step: 180 };
   }
@@ -24,7 +26,7 @@ export class SmsService {
     return secret;
   }
 
-  // Send OTP via Hubtel SMS API
+  // Send OTP via Hubtel SMS API and email
   async sendOtp(userId: number): Promise<void> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -40,31 +42,49 @@ export class SmsService {
       phoneNumber = submission?.phoneNumber;
     }
 
-    if (!phoneNumber) {
-      throw new HttpException('Phone number not set for user', HttpStatus.BAD_REQUEST);
+    if (!phoneNumber && !user.email) {
+      throw new HttpException('Neither phone number nor email set for user', HttpStatus.BAD_REQUEST);
     }
     if (!user.tfaSecret) {
       throw new HttpException('2FA not set up for user', HttpStatus.BAD_REQUEST);
     }
 
     const otp = authenticator.generate(user.tfaSecret); // Generate 6-digit OTP
-    const clientId = this.configService.get<string>('HUBTEL_CLIENT_ID');
-    const clientSecret = this.configService.get<string>('HUBTEL_CLIENT_SECRET');
-    const sender = this.configService.get<string>('HUBTEL_SENDER');
+    
+    // Send OTP via SMS if phone number exists
+    if (phoneNumber) {
+      const clientId = this.configService.get<string>('HUBTEL_CLIENT_ID');
+      const clientSecret = this.configService.get<string>('HUBTEL_CLIENT_SECRET');
+      const sender = this.configService.get<string>('HUBTEL_SENDER');
 
-    const url = 'https://smsc.hubtel.com/v1/messages/send';
-    const params = {
-      clientid: clientId,
-      clientsecret: clientSecret,
-      from: sender,
-      to: phoneNumber,
-      content: `Your OTP is ${otp}. It expires in 3 minutes.`,
-    };
+      const url = 'https://smsc.hubtel.com/v1/messages/send';
+      const params = {
+        clientid: clientId,
+        clientsecret: clientSecret,
+        from: sender,
+        to: phoneNumber,
+        content: `Your OTP is ${otp}. It expires in 3 minutes.`,
+      };
 
-    try {
-      await lastValueFrom(this.httpService.get(url, { params }));
-    } catch (error) {
-      throw new HttpException('Failed to send OTP via SMS', HttpStatus.INTERNAL_SERVER_ERROR);
+      try {
+        await lastValueFrom(this.httpService.get(url, { params }));
+      } catch (error) {
+        console.error('Failed to send OTP via SMS:', error);
+        // Don't throw error, continue with email
+      }
+    }
+
+    // Send OTP via email
+    if (user.email) {
+      try {
+        await this.notificationsService.sendOtpEmail(user.email, user.name, otp);
+      } catch (error) {
+        console.error('Failed to send OTP via email:', error);
+        // If both SMS and email fail, throw error
+        if (!phoneNumber) {
+          throw new HttpException('Failed to send OTP via email', HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+      }
     }
   }
 

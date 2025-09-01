@@ -29,6 +29,9 @@ export class CreateUserDto {
   @IsOptional()
   @Matches(/^\+\d{10,15}$/, { message: 'Phone number must include country code (e.g., +233557484584)' })
   phoneNumber?: string;
+
+  @IsOptional()
+  enable2FA?: boolean;
 }
 
 export class InitUserDto {
@@ -45,9 +48,12 @@ export class InitUserDto {
   role: 'STAFF' | 'ADMIN' | 'SUPERVISOR';
 
   @IsString()
-  @IsNotEmpty()
+  @IsOptional()
   @Matches(/^\+\d{10,15}$/, { message: 'Phone number must include country code (e.g., +233557484584)' })
-  phoneNumber: string;
+  phoneNumber?: string;
+
+  @IsOptional()
+  enable2FA?: boolean;
 }
 
 export class CreateDepartmentDto {

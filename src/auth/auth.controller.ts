@@ -1,4 +1,4 @@
-import { Controller, Post, Body, UseGuards, Request, Get, Req, HttpException, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, Request, Get, Req, HttpException, HttpStatus, Param } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { RateLimitGuard } from './rate-limit.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -75,7 +75,7 @@ export class AuthController {
   @UseGuards(JwtAuthGuard, RolesGuard, RateLimitGuard)
   @Roles('ADMIN')
   async initUser(@Body() body: InitUserDto, @Request() req) {
-    return this.authService.initUser(body.staffId, body.email, body.name, body.role, req.user, body.phoneNumber);
+    return this.authService.initUser(body.staffId, body.email, body.name, body.role, req.user, body.phoneNumber, body.enable2FA);
   }
 
    @Post('request-forgot-password')
@@ -99,5 +99,11 @@ export class AuthController {
       body.password,
       body.confirmPassword,
     );
+  }
+
+  // Debug endpoint to check user 2FA status
+  @Get('check-2fa-status/:staffId')
+  async checkUser2FAStatus(@Param('staffId') staffId: string) {
+    return this.authService.checkUser2FAStatus(staffId);
   }
 }

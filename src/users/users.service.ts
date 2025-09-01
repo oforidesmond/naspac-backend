@@ -1445,7 +1445,7 @@ async updateDepartment(departmentId: number, dto: UpdateDepartmentDto, requester
     });
   }
 
-  async deleteStaff(staffId: number, requesterId: number) {
+ async deleteStaff(staffId: number, requesterId: number) {
   const requester = await this.prisma.user.findUnique({
     where: { id: requesterId, deletedAt: null },
     select: { role: true },
@@ -1456,7 +1456,7 @@ async updateDepartment(departmentId: number, dto: UpdateDepartmentDto, requester
 
   const staff = await this.prisma.user.findUnique({
     where: { id: staffId },
-    select: { id: true, role: true, email: true, name: true, staffId: true, deletedAt: true },
+    select: { id: true, role: true, email: true, name: true, staffId: true, nssNumber: true, deletedAt: true },
   });
   if (!staff || staff.deletedAt) {
     throw new HttpException('Staff user not found or already deleted', HttpStatus.NOT_FOUND);
@@ -1468,26 +1468,36 @@ async updateDepartment(departmentId: number, dto: UpdateDepartmentDto, requester
     throw new HttpException('Cannot delete your own account', HttpStatus.BAD_REQUEST);
   }
 
-  const supervisedDepartments = await this.prisma.department.count({
-    where: { supervisorId: staffId, deletedAt: null },
-  });
-  if (supervisedDepartments > 0) {
-    throw new HttpException('Cannot delete staff who supervises active departments', HttpStatus.BAD_REQUEST);
-  }
+  // Optional: Check for supervised departments (uncomment if needed)
+  // const supervisedDepartments = await this.prisma.department.count({
+  //   where: { supervisorId: staffId, deletedAt: null },
+  // });
+  // if (supervisedDepartments > 0) {
+  //   throw new HttpException('Cannot delete staff who supervises active departments', HttpStatus.BAD_REQUEST);
+  // }
 
   return this.prisma.$transaction(async (prisma) => {
+    // Soft delete the user and clear unique fields
     const deletedStaff = await prisma.user.update({
       where: { id: staffId },
-      data: { deletedAt: new Date() },
-      select: { id: true, name: true, staffId: true, email: true, role: true },
+      data: {
+        deletedAt: new Date(),
+        nssNumber: null, // Clear unique field
+        staffId: null,   // Clear unique field
+        email: null,
+        phoneNumber: null,
+        name: null,
+      },
+      select: { id: true, name: true, staffId: true, nssNumber: true, email: true, role: true },
     });
 
+    // Log the original credentials in the audit log for traceability
     await prisma.auditLog.create({
       data: {
         submissionId: null,
         action: 'STAFF_DELETED',
         userId: requesterId,
-        details: `Admin (ID: ${requesterId}) deleted staff (ID: ${staffId}, Email: ${deletedStaff.email})`,
+        details: `Admin (ID: ${requesterId}) soft-deleted staff (ID: ${staffId}, Name: ${staff.name}, Email: ${staff.email}, NSS: ${staff.nssNumber}, Staff ID: ${staff.staffId})`,
         createdAt: new Date(),
       },
     });
@@ -1498,7 +1508,7 @@ async updateDepartment(departmentId: number, dto: UpdateDepartmentDto, requester
         description: `Your account has been deactivated by admin.`,
         timestamp: new Date(),
         iconType: 'USER',
-        role: deletedStaff.role,
+        role: staff.role,
         userId: staffId,
       },
     });
@@ -1506,7 +1516,7 @@ async updateDepartment(departmentId: number, dto: UpdateDepartmentDto, requester
     await prisma.notification.create({
       data: {
         title: 'Staff Account Deactivated',
-        description: `Staff (ID: ${staffId}, Email: ${deletedStaff.email}) account deactivated by Admin (ID: ${requesterId}).`,
+        description: `Staff (ID: ${staffId}, Name: ${staff.name}) account deactivated by Admin (ID: ${requesterId}).`,
         timestamp: new Date(),
         iconType: 'SETTING',
         role: 'ADMIN',
@@ -1514,8 +1524,8 @@ async updateDepartment(departmentId: number, dto: UpdateDepartmentDto, requester
     });
 
     return { message: `Staff (ID: ${staffId}) successfully deactivated` };
-    });
-  }
+  });
+}
 
   async deleteDepartment(departmentId: number, requesterId: number) {
   const requester = await this.prisma.user.findUnique({
@@ -1547,7 +1557,7 @@ async updateDepartment(departmentId: number, dto: UpdateDepartmentDto, requester
   return this.prisma.$transaction(async (prisma) => {
     const deletedDepartment = await prisma.department.update({
       where: { id: departmentId },
-      data: { deletedAt: new Date() },
+      data: { deletedAt: new Date(), name: null },
       select: { id: true, name: true, supervisorId: true },
     });
 

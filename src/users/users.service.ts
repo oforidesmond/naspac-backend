@@ -1456,7 +1456,7 @@ async updateDepartment(departmentId: number, dto: UpdateDepartmentDto, requester
 
   const staff = await this.prisma.user.findUnique({
     where: { id: staffId },
-    select: { id: true, role: true, email: true, name: true, staffId: true, nssNumber: true, deletedAt: true },
+    select: { id: true, role: true, email: true, name: true, staffId: true, deletedAt: true },
   });
   if (!staff || staff.deletedAt) {
     throw new HttpException('Staff user not found or already deleted', HttpStatus.NOT_FOUND);
@@ -1497,7 +1497,7 @@ async updateDepartment(departmentId: number, dto: UpdateDepartmentDto, requester
         submissionId: null,
         action: 'STAFF_DELETED',
         userId: requesterId,
-        details: `Admin (ID: ${requesterId}) soft-deleted staff (ID: ${staffId}, Name: ${staff.name}, Email: ${staff.email}, NSS: ${staff.nssNumber}, Staff ID: ${staff.staffId})`,
+        details: `Admin (ID: ${requesterId}) soft-deleted staff (ID: ${staffId}, Name: ${staff.name}, Email: ${staff.email}, Staff ID: ${staff.staffId})`,
         createdAt: new Date(),
       },
     });

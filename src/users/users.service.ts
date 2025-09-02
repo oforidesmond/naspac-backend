@@ -15,6 +15,7 @@ import * as pdfMake from 'pdfmake/build/pdfmake';
 import * as pdfFonts from 'pdfmake/build/vfs_fonts';
 import * as fs from 'fs';
 import * as path from 'path';
+import { LocalStorageService } from 'src/documents/local-storage.service';
 
 // function getBase64Image(filePath: string): string {
 //   const absPath = path.resolve(filePath);
@@ -24,24 +25,26 @@ import * as path from 'path';
 
 
 function getBase64Image(filePath: string): string {
-  // Try different possible locations
+  const baseStoragePath = process.env.SERVER_ABSOLUTE_PATH || process.cwd();
   const possiblePaths = [
-    path.resolve(filePath), // Original relative path
-    path.resolve('src', filePath), // Development path
-    path.resolve('dist/src', filePath), // Production path
-    path.resolve(process.cwd(), filePath), // Current working directory
-    path.resolve(process.cwd(), 'src', filePath), // CWD + src
-    path.resolve(process.cwd(), 'storage', filePath),
+    path.resolve(filePath),
+    path.resolve('src', filePath),
+    path.resolve('dist/src', filePath),
+    path.resolve(baseStoragePath, filePath),
+    path.resolve(baseStoragePath, 'files', filePath),
+    path.resolve(baseStoragePath, 'assets', filePath), // For static assets
   ];
 
   for (const absPath of possiblePaths) {
+    console.log(`Trying path: ${absPath}`);
     try {
       if (fs.existsSync(absPath)) {
         const file = fs.readFileSync(absPath);
+        console.log(`Found file at: ${absPath}`);
         return file.toString('base64');
       }
     } catch (error) {
-      // Continue to next path
+      console.error(`Error accessing ${absPath}:`, error);
     }
   }
   
@@ -69,6 +72,7 @@ export class UsersService {
   constructor(private prisma: PrismaService,
     private httpService: HttpService,
     private notificationsService: NotificationsService,
+    private localStorageService: LocalStorageService,
   ) {}
 
   private toAbsoluteFileUrl(url?: string | null): string | null {
@@ -213,25 +217,22 @@ async createUser(dto: CreateUserDto) {
     let postingLetterUrl = '';
     let appointmentLetterUrl = '';
 
-    if (files.postingLetter) {
-      const fileKey = `posting-letters/${userId}-${Date.now()}.pdf`;
-      postingLetterUrl = `/files/${fileKey}`;
-      const fs = await import('fs');
-      const path = await import('path');
-      const targetPath = path.join(process.cwd(), 'storage', fileKey);
-      await fs.promises.mkdir(path.dirname(targetPath), { recursive: true });
-      await fs.promises.writeFile(targetPath, files.postingLetter.buffer);
-    }
+ if (files.postingLetter) {
+  const fileName = `posting-letters/${userId}-${Date.now()}-${Math.random().toString(36).slice(2)}.pdf`;
+  postingLetterUrl = await this.localStorageService.uploadFile(
+    files.postingLetter.buffer,
+    fileName,
+  );
+}
 
-    if (files.appointmentLetter) {
-      const fileKey = `appointment-letters/${userId}-${Date.now()}.pdf`;
-      appointmentLetterUrl = `/files/${fileKey}`;
-      const fs = await import('fs');
-      const path = await import('path');
-      const targetPath = path.join(process.cwd(), 'storage', fileKey);
-      await fs.promises.mkdir(path.dirname(targetPath), { recursive: true });
-      await fs.promises.writeFile(targetPath, files.appointmentLetter.buffer);
-    }
+if (files.appointmentLetter) {
+  const fileName = `appointment-letters/${userId}-${Date.now()}-${Math.random().toString(36).slice(2)}.pdf`;
+  appointmentLetterUrl = await this.localStorageService.uploadFile(
+    files.appointmentLetter.buffer,
+    fileName,
+  );
+}
+
 
     const yearOfNss = parseInt(dto.yearOfNss, 10);
     if (isNaN(yearOfNss) || yearOfNss < 1900 || yearOfNss > new Date().getFullYear()) {
@@ -347,17 +348,21 @@ async createUser(dto: CreateUserDto) {
     );
   }
 
+  if (submission.verificationFormUrl) {
+    throw new HttpException('Verification form already submitted', HttpStatus.BAD_REQUEST);
+  }
+
+  // Validate file
   if (!verificationForm || verificationForm.mimetype !== 'application/pdf') {
     throw new HttpException('Verification form must be a PDF', HttpStatus.BAD_REQUEST);
   }
 
-  const fileKey = `verification-forms/${userId}-${Date.now()}.pdf`;
-  const fs = await import('fs');
-  const path = await import('path');
-  const targetPath = path.join(process.cwd(), 'storage', fileKey);
-  await fs.promises.mkdir(path.dirname(targetPath), { recursive: true });
-  await fs.promises.writeFile(targetPath, verificationForm.buffer);
-  const verificationFormUrl = `/files/${fileKey}`;
+  // Upload file to local storage
+  const fileName = `verification-forms/${userId}-${Date.now()}-${Math.random().toString(36).slice(2)}.pdf`;
+  const verificationFormUrl = await this.localStorageService.uploadFile(
+    verificationForm.buffer,
+    fileName,
+  );
 
   return this.prisma.$transaction(async (prisma) => {
     const updatedSubmission = await prisma.submission.update({
@@ -727,16 +732,15 @@ async updateSubmissionStatus(
 
       // Generate PDF and upload to Supabase
   const pdfDoc = (pdfMake as any).createPdf(docDefinition, null, fonts);
-       const pdfBuffer: Buffer = await new Promise((resolve, reject) => {
-    pdfDoc.getBuffer((buffer: Buffer) => resolve(buffer));
-  });
-       const fileKeyOutput = `job-confirmation-letters/${submissionId}-${Date.now()}.pdf`;
-      const fs = await import('fs');
-      const path = await import('path');
-      const targetPath = path.join(process.cwd(), 'storage', fileKeyOutput);
-      await fs.promises.mkdir(path.dirname(targetPath), { recursive: true });
-      await fs.promises.writeFile(targetPath, pdfBuffer as Buffer);
-      jobConfirmationLetterUrl = `/files/${fileKeyOutput}`;
+const pdfBuffer: Buffer = await new Promise((resolve) => {
+        pdfDoc.getBuffer((buffer: Buffer) => resolve(buffer));
+      });
+
+      const fileName = `job-confirmation-letters/${submissionId}-${Date.now()}-${Math.random().toString(36).slice(2)}.pdf`;
+      jobConfirmationLetterUrl = await this.localStorageService.uploadFile(
+        pdfBuffer,
+        fileName,
+      );
     }
 
     const updatedSubmission = await prisma.submission.update({
@@ -799,29 +803,70 @@ async updateSubmissionStatus(
 
 // New endpoint to handle signature upload for appointment letter
 async uploadAppointmentSignature(userId: number, file: Express.Multer.File) {
-  const user = await this.prisma.user.findUnique({ where: { id: userId, deletedAt: null } });
+  const user = await this.prisma.user.findUnique({
+    where: { id: userId, deletedAt: null },
+    select: { id: true, role: true, name: true },
+  });
   if (!user || !['ADMIN', 'STAFF'].includes(user.role)) {
     throw new HttpException('Unauthorized: Only ADMIN or STAFF can upload signatures', HttpStatus.FORBIDDEN);
   }
 
   // Validate file type
   const allowedTypes = ['image/png', 'image/jpeg'];
-  if (!allowedTypes.includes(file.mimetype)) {
+  if (!file || !allowedTypes.includes(file.mimetype)) {
     throw new HttpException('Only PNG or JPEG files are allowed', HttpStatus.BAD_REQUEST);
   }
 
   // Save signature to local storage
-  const signaturePath = path.join(process.cwd(), 'storage', 'signatures', `user-${userId}-signature.png`);
-  await fs.promises.mkdir(path.dirname(signaturePath), { recursive: true });
-  await fs.promises.writeFile(signaturePath, file.buffer);
+ const fileName = `signatures/user-${userId}-${Date.now()}-${Math.random().toString(36).slice(2)}.${file.mimetype.split('/')[1]}`;
+  const signaturePath = await this.localStorageService.uploadFile(
+    file.buffer,
+    fileName,
+  );
 
-  // Optionally, store a reference in the database
-  await this.prisma.user.update({
-    where: { id: userId },
-    data: { signaturePath: `/signatures/user-${userId}-signature.png` },
+  return this.prisma.$transaction(async (prisma) => {
+    // Update user with signature path
+    const updatedUser = await prisma.user.update({
+      where: { id: userId, deletedAt: null },
+      data: { signaturePath, updatedAt: new Date() },
+      select: { id: true, name: true, role: true },
+    });
+
+    // Create audit log
+    await prisma.auditLog.create({
+      data: {
+        action: 'SIGNATURE_UPLOADED',
+        userId,
+        details: `User (ID: ${userId}, Name: ${user.name}, Role: ${user.role}) uploaded a new signature.`,
+        createdAt: new Date(),
+      },
+    });
+
+    // Notify user
+    await prisma.notification.create({
+      data: {
+        title: 'Signature Uploaded',
+        description: 'Your signature has been uploaded successfully.',
+        timestamp: new Date(),
+        iconType: 'USER',
+        role: user.role,
+        userId,
+      },
+    });
+
+    // Notify admin/staff
+    await prisma.notification.create({
+      data: {
+        title: 'New Signature Uploaded',
+        description: `A new signature has been uploaded by ${user.name} (ID: ${userId}, Role: ${user.role}).`,
+        timestamp: new Date(),
+        iconType: 'BELL',
+        role: 'ADMIN',
+      },
+    });
+
+    return { message: 'Signature uploaded successfully', signaturePath };
   });
-
-  return { message: 'Signature uploaded successfully' };
 }
 
   async getSubmissionStatusCounts(userId: number, dto: GetSubmissionStatusCountsDto) {

@@ -4,8 +4,20 @@ import * as path from 'path';
 
 @Injectable()
 export class LocalStorageService {
-  private readonly baseDir = path.resolve('storage');
-  private readonly publicPrefix = '/files/';
+   private readonly baseDir: string;
+  private readonly publicPrefix: string;
+
+  constructor() {
+    const nodeEnv = process.env.NODE_ENV || 'development';
+
+    if (nodeEnv === 'production') {
+      this.baseDir = path.join(process.env.SERVER_ABSOLUTE_PATH || process.cwd(), 'files');
+      this.publicPrefix = '/files/';
+    } else {
+      this.baseDir = path.resolve('storage');
+      this.publicPrefix = '/files/';
+    }
+  }
 
   private ensureDirExists(dirPath: string) {
     if (!fs.existsSync(dirPath)) {
@@ -13,7 +25,7 @@ export class LocalStorageService {
     }
   }
 
-  async uploadFile(
+    async uploadFile(
     file: Buffer,
     fileName: string,
     _bucket: string = 'default',
@@ -25,7 +37,7 @@ export class LocalStorageService {
     return this.getPublicUrl(fileName);
   }
 
-  async getFile(fileName: string, _bucket: string = 'default') {
+   async getFile(fileName: string, _bucket: string = 'default') {
     const targetPath = path.join(this.baseDir, fileName);
     if (!fs.existsSync(targetPath)) {
       throw new Error('File not found');
@@ -55,5 +67,3 @@ export class LocalStorageService {
     }
   }
 }
-
-

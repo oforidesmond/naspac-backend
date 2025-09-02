@@ -126,29 +126,51 @@ async createUser(dto: CreateUserDto) {
 }
 
    async findByStaffId(staffId: string) {
-    return this.prisma.user.findUnique({
-      where: { staffId, deletedAt: null },
-    });
-  }
+  return this.prisma.user.findFirst({
+    where: {
+      staffId: {
+        equals: staffId.toLowerCase(),
+        mode: 'insensitive',
+      },
+      deletedAt: null,
+    },
+  });
+}
 
   async findByNssNumber(nssNumber: string) {
-    return this.prisma.user.findUnique({
-      where: { nssNumber, deletedAt: null },
-    });
-  }
-
-
-    async findByNssNumberOrStaffId(identifier: string) {
-    return this.prisma.user.findFirst({
-      where: {
-        OR: [
-          { nssNumber: identifier },
-          { staffId: identifier },
-          // { deletedAt: null },
-        ],
+  return this.prisma.user.findFirst({
+    where: {
+      nssNumber: {
+        equals: nssNumber.toLowerCase(),
+        mode: 'insensitive',
       },
-    });
-  }
+      deletedAt: null,
+    },
+  });
+}
+
+   async findByNssNumberOrStaffId(identifier: string) {
+  return this.prisma.user.findFirst({
+    where: {
+      OR: [
+        {
+          nssNumber: {
+            equals: identifier.toLowerCase(),
+            mode: 'insensitive',
+          },
+        },
+        {
+          staffId: {
+            equals: identifier.toLowerCase(),
+            mode: 'insensitive',
+          },
+        },
+      ],
+      // deletedAt: null,
+    },
+  });
+}
+
 
   async findById(id: number) {
     return this.prisma.user.findUnique({ where: { id, deletedAt: null } });

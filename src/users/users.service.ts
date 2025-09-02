@@ -533,7 +533,7 @@ async updateSubmissionStatus(
 
   const submission = await this.prisma.submission.findUnique({
     where: { id: submissionId },
-    select: { id: true, userId: true, fullName: true, nssNumber: true, email: true, status: true, deletedAt: true, jobConfirmationLetterUrl: true, phoneNumber: true, user: { select: { department: true } } },
+    select: { id: true, userId: true, fullName: true, nssNumber: true, email: true, status: true, deletedAt: true, jobConfirmationLetterUrl: true, phoneNumber: true, divisionPostedTo: true, user: { select: { department: true } } },
   });
   if (!submission || submission.deletedAt) {
     throw new HttpException('Submission not found', HttpStatus.NOT_FOUND);
@@ -625,7 +625,7 @@ async updateSubmissionStatus(
       {
         text: [
           'We are pleased to inform you have been accepted to undertake your National Service at the ',
-          { text: `${departmentName} Department, COCOBOD Head Office, Accra`, bold: true },
+          { text: `${departmentName} Department, ${submission.divisionPostedTo}`, bold: true },
           ' with effect from ',
           { text: `Friday, November 1, ${currentYear} to Friday, October 31, ${nextYear}`, bold: true },
           '.',
@@ -1201,7 +1201,15 @@ async uploadAppointmentSignature(userId: number, file: Express.Multer.File) {
   ] = await Promise.all([
     // 1. Total personnel (not deleted)
     this.prisma.user.count({
-      where: { role: 'PERSONNEL', deletedAt: null },
+     where: {
+    role: 'PERSONNEL',
+    deletedAt: null,
+    submissions: {
+      some: {
+        status: { in: [ 'VALIDATED', 'COMPLETED'] },
+      },
+    },
+  },
     }),
 
     // 2. Total non-personnel

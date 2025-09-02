@@ -212,9 +212,12 @@ async loginStaffAdmin(staffId: string, password: string) {
     if (existingUser) {
       throw new HttpException('NSS number already registered', HttpStatus.BAD_REQUEST);
     }
-    if (existingUser.deletedAt !== null) {
-      throw new HttpException('Account is disabled. Please contact support.', HttpStatus.UNAUTHORIZED);
-    }
+    if (existingUser?.deletedAt) {
+  throw new HttpException(
+    'Account is disabled. Please contact support.',
+    HttpStatus.UNAUTHORIZED,
+  );
+}
     const currentYear = new Date().getFullYear();
     const nssNumberWithYear = `${nssNumber}${currentYear}`;
 

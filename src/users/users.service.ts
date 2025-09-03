@@ -598,11 +598,21 @@ async updateSubmissionStatus(
       const today = moment().format('DD/MM/YYYY');
       const departmentName = submission.user.department.name;
 
-        // Fetch the signature from storage
-      const signaturePath = `signatures/user-${userId}-signature.png`;
+   // Fetch the signature path from the user record
+      const user = await prisma.user.findUnique({
+        where: { id: userId, deletedAt: null },
+        select: { signaturePath: true },
+      });
+      if (!user || !user.signaturePath) {
+        throw new HttpException(
+          `No signature found for user ${userId}`,
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
       let signatureBase64;
       try {
-        signatureBase64 = getBase64Image(signaturePath);
+        signatureBase64 = getBase64Image(user.signaturePath);
       } catch (error) {
         throw new HttpException(
           `Failed to load signature for user ${userId}: ${error.message}`,

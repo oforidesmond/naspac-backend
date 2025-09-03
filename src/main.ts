@@ -16,12 +16,12 @@ async function bootstrap() {
   const port = configService.get<number>('PORT') || 3000;
   const nodeEnv = configService.get<string>('NODE_ENV') || 'development';
 
-  // app.enableCors({
-  //   origin: '*',
-  //   methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
-  //   allowedHeaders: 'Content-Type, Authorization',
-  //   credentials: true,
-  // });
+ app.enableCors({
+  origin: ['https://nss.cocobod.net', 'http://localhost:5173'],
+   methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+   allowedHeaders: 'Content-Type, Authorization',
+   credentials: true,
+  });
 
   // Bull Dashboard
   const serverAdapter = new ExpressAdapter();

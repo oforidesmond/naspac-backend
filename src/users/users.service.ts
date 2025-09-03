@@ -737,7 +737,7 @@ async updateSubmissionStatus(
     
       images: {
     ...(letterheadBase64 ? { letterhead: `data:image/png;base64,${letterheadBase64}` } : {}),
-    ...(signatureBase64 ? { signature: `data:image/png;base64,${signatureBase64}` } : {}),
+    signature: `data:image/png;base64,${signatureBase64}`,
   },
     defaultStyle: {
       font: 'Roboto',

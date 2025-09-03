@@ -53,7 +53,13 @@ function getBase64Image(filePath: string): string {
 
 (pdfMake as any).vfs = pdfFonts.vfs;
 
-const letterheadBase64 = getBase64Image('src/assets/letterhead.png');
+let letterheadBase64: string | null = null;
+try {
+  letterheadBase64 = getBase64Image('src/assets/letterhead.png');
+} catch (error) {
+  console.error('Failed to load letterhead:', error.message);
+  letterheadBase64 = null; // Fallback to no letterhead
+}
 // const signatureBase64 = getBase64Image('src/assets/signature.png');
 
 const fonts = {
@@ -730,8 +736,8 @@ async updateSubmissionStatus(
     ],
     
       images: {
-    letterhead: `data:image/png;base64,${letterheadBase64}`,
-    signature: `data:image/png;base64,${signatureBase64}`,
+    ...(letterheadBase64 ? { letterhead: `data:image/png;base64,${letterheadBase64}` } : {}),
+    ...(signatureBase64 ? { signature: `data:image/png;base64,${signatureBase64}` } : {}),
   },
     defaultStyle: {
       font: 'Roboto',

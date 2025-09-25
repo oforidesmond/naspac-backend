@@ -17,7 +17,7 @@ export class NotificationsService {
         content: `
           <h1>Welcome to NASPAC</h1>
           <p>Click <a href="${this.frontendUrl}/reset-password?nssNumber=${nssNumber}&token=${token}">here</a> to set your password to access your dashboard.</p>
-          <p>This link expires in 1 hour.</p>
+          <p>This link expires in 24 hours.</p>
         `,
       },
       {

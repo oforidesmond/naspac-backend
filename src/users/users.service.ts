@@ -26,13 +26,16 @@ import { LocalStorageService } from 'src/documents/local-storage.service';
 
 function getBase64Image(filePath: string): string {
   const baseStoragePath = process.env.SERVER_ABSOLUTE_PATH || process.cwd();
+
+  const normalizedPath = filePath.startsWith("/") ? filePath.slice(1) : filePath;
+
   const possiblePaths = [
-    path.resolve(filePath),
-    path.resolve('src', filePath),
-    path.resolve('dist/src', filePath),
-    path.resolve(baseStoragePath, filePath),
-    path.resolve(baseStoragePath, 'files', filePath),
-    path.resolve(baseStoragePath, 'assets', filePath), // For static assets
+    path.resolve(normalizedPath),
+    path.resolve("src", normalizedPath),
+    path.resolve("dist/src", normalizedPath),
+    path.resolve(baseStoragePath, normalizedPath),
+    path.resolve(baseStoragePath, "files", normalizedPath),
+    path.resolve(baseStoragePath, "assets", normalizedPath),
   ];
 
   for (const absPath of possiblePaths) {
@@ -339,7 +342,7 @@ if (files.appointmentLetter) {
     throw new HttpException('Only PERSONNEL can submit verification forms', HttpStatus.FORBIDDEN);
   }
 
-  const submission = await this.prisma.submission.findUnique({
+  const submission = await this.prisma.submission.findFirst({
     where: { userId },
     select: { id: true, status: true, deletedAt: true, verificationFormUrl: true },
   });
@@ -447,19 +450,116 @@ if (files.appointmentLetter) {
   });
 }
 
-  async getGhanaUniversities() {
-    try {
-      const response = await firstValueFrom(
-        this.httpService.get('http://universities.hipolabs.com/search?country=Ghana'),
-      );
-      return response.data.map((uni: any) => ({
-        name: uni.name,
-      }));
-    } catch (error) {
-      console.error('Failed to fetch universities:', error.message);
-      return [];
-    }
+async getGhanaUniversities() {
+  try {
+    const universities = [
+      "Academic City College",
+      "Accra Metropolitan University",
+      "Accra Technical University",
+      "Accra Institute of Technology",
+      "Accra College of Medicine",
+      "Advanced Business University College",
+      "Anglican University College of Technology",
+      "African University of Communication and Business",
+      "Akenten Appiah-Menka University of Skills Training and Entrepreneurial Development",
+      "Akrofi-Christaller Institute of Theology, Mission and Culture",
+      "All Nations University",
+      "Ashesi University",
+      "BlueCrest University College",
+      "Bolgatanga Technical University",
+      "C.K. Tedam University of Technology and Applied Sciences",
+      "Cape Coast Technical University",
+      "Catholic University",
+      "Central University",
+      "Christian Service University",
+      "Christ Apostolic University College",
+      "Consular and Diplomatic Service University",
+      "Catholic Institute of Business and Technology",
+      "China Europe International Business School (CEIBS) Ghana Campus",
+      "Data Link University College",
+      "Deltas University College",
+      "Dominion University College",
+      "Dr. Hilla Limann Technical University",
+      "Ensign Global University",
+      "Evangelical Presbyterian University College",
+      "Entrance University of Health Sciences",
+      "Family Health University",
+      "Garden City University",
+      "Ghana Armed Forces Command and Staff College",
+      "Ghana Communication Technology University",
+      "Ghana Institute of Journalism",
+      "Ghana Institute of Languages",
+      "Ghana Institute of Management and Public Administration (GIMPA)",
+      "Ghana Technology University College",
+      "Ghana Telecom University College",
+      "Ghana University of Business and Integrated Development Studies",
+      "Ghana Baptist University College",
+      "Ghana Christian University College",
+      "Heritage Christian University",
+      "Ho Technical University",
+      "Islamic University College",
+      "Jayee University College",
+      "KAAF University College",
+      "KNUTSFORD University",
+      "Kofi Annan International Peacekeeping Training Centre",
+      "Koforidua Technical University",
+      "Kumasi Technical University",
+      "Kessben University College",
+      "Kwame Nkrumah University of Science and Technology",
+      "Lancaster University College",
+      "Maranatha University College",
+      "Methodist University",
+      "Mountcrest University College",
+      "Meridian (Insaaniyya) University College",
+      "Marshalls University College",
+      "Nobel International Business University",
+      "Open University of West Africa",
+      "Pentecost University",
+      "Perez University College",
+      "Presbyterian University",
+      "Pan African Christian University College",
+      "Radford University College",
+      "Regent University College of Science and Technology",
+      "Regional Maritime University",
+      "S.D. Dombo University of Business and Integrated Development Studies",
+      "Simon Diedong Dombo University of Business and Integrated Development Studies",
+      "Sunyani Technical University",
+      "Spiritan University College",
+      "Sikkim Manipal University (Ghana Campus)",
+      "Takoradi Technical Institute",
+      "Takoradi Technical University",
+      "Tamale Technical University",
+      "Thrivus University for Biomedical Science and Technology",
+      "Trinity Theological Seminary",
+      "University for Development Studies",
+      "University of Applied Management",
+      "University of Cape Coast",
+      "University of Education, Winneba",
+      "University of Energy and Natural Resources",
+      "University of Environment and Sustainable Development",
+      "University of Ghana",
+      "University of Gold Coast",
+      "University of Health and Allied Sciences",
+      "University of Media, Arts and Communication",
+      "University of Mines and Technology",
+      "University of Professional Studies",
+      "University College of Agriculture and Environmental Studies",
+      "University College of Design and Technology",
+      "University College of Management Studies",
+      "Valley View University",
+      "West End University College",
+      "Wisconsin International University College",
+      "Webster University, Ghana Campus",
+      "Zenith University College",
+      "Other"
+    ];
+
+    return universities.map(name => ({ name }));
+  } catch (error) {
+    console.error('Failed to process universities:', error.message);
+    return [];
   }
+}
 
    async getOnboardingStatus(userId: number) {
     const submission = await this.prisma.submission.findFirst({
@@ -555,266 +655,320 @@ if (files.appointmentLetter) {
   }
 
 async updateSubmissionStatus(
-  userId: number,
-  submissionId: number,
-  dto: UpdateSubmissionStatusDto,
+ userId: number,
+ submissionId: number,
+ dto: UpdateSubmissionStatusDto,
 ) {
-  const user = await this.prisma.user.findUnique({ where: { id: userId, deletedAt: null } });
-  if (!user || !['ADMIN', 'STAFF'].includes(user.role)) {
-    throw new HttpException('Unauthorized: Only ADMIN or STAFF can update submission status', HttpStatus.FORBIDDEN);
-  }
+ const user = await this.prisma.user.findUnique({ 
+ where: { id: userId, deletedAt: null },
+ select: { role: true, name: true } // Added name for notification
+ });
+ if (!user || !['ADMIN', 'STAFF'].includes(user.role)) {
+ throw new HttpException('Unauthorized: Only ADMIN or STAFF can update submission status', HttpStatus.FORBIDDEN);
+ }
 
-  const submission = await this.prisma.submission.findUnique({
-    where: { id: submissionId },
-    select: { id: true, userId: true, fullName: true, nssNumber: true, email: true, status: true, deletedAt: true, jobConfirmationLetterUrl: true, phoneNumber: true, divisionPostedTo: true, user: { select: { department: true } } },
-  });
-  if (!submission || submission.deletedAt) {
-    throw new HttpException('Submission not found', HttpStatus.NOT_FOUND);
-  }
+ const submission = await this.prisma.submission.findUnique({
+ where: { id: submissionId },
+ select: { 
+ id: true, 
+ userId: true, 
+ fullName: true, 
+ nssNumber: true, 
+ email: true, 
+ status: true, 
+ deletedAt: true, 
+ jobConfirmationLetterUrl: true, 
+ phoneNumber: true, 
+ divisionPostedTo: true, 
+ user: { select: { department: true } } 
+ },
+ });
+ if (!submission || submission.deletedAt) {
+ throw new HttpException('Submission not found', HttpStatus.NOT_FOUND);
+ }
 
-  const validStatusTransitions = {
-    PENDING: ['PENDING_ENDORSEMENT', 'REJECTED'],
-    PENDING_ENDORSEMENT: ['ENDORSED', 'REJECTED'],
-    ENDORSED: ['VALIDATED', 'REJECTED'],
-    VALIDATED: ['COMPLETED', 'REJECTED'],
-    REJECTED: ['PENDING'], // Allow resubmission
-    COMPLETED: [],
-  };
+ const validStatusTransitions = {
+ PENDING: ['PENDING_ENDORSEMENT', 'REJECTED'],
+ PENDING_ENDORSEMENT: ['ENDORSED', 'REJECTED'],
+ ENDORSED: ['VALIDATED', 'REJECTED'],
+ VALIDATED: ['COMPLETED', 'REJECTED'],
+ REJECTED: ['PENDING'], // Allow resubmission
+ COMPLETED: [],
+ };
 
-  if (
-    validStatusTransitions[submission.status] &&
-    !validStatusTransitions[submission.status].includes(dto.status)
-  ) {
-    throw new HttpException(
-      `Invalid status transition from ${submission.status} to ${dto.status}`,
-      HttpStatus.BAD_REQUEST,
-    );
-  }
+ if (
+ validStatusTransitions[submission.status] &&
+ !validStatusTransitions[submission.status].includes(dto.status)
+ ) {
+ throw new HttpException(
+ `Invalid status transition from ${submission.status} to ${dto.status}`,
+ HttpStatus.BAD_REQUEST,
+ );
+ }
 
-  // Using local storage instead of Supabase
+ return this.prisma.$transaction(async (prisma) => {
+ let jobConfirmationLetterUrl = submission.jobConfirmationLetterUrl;
 
-  return this.prisma.$transaction(async (prisma) => {
-    let jobConfirmationLetterUrl = submission.jobConfirmationLetterUrl;
+ // Commented out the letter generation logic to disable it
+ if (dto.status === 'VALIDATED' && !jobConfirmationLetterUrl) {
+ const currentYear = new Date().getFullYear();
+ const yearRange = currentYear === 2025 ? '2024/2025' : `${currentYear}/${currentYear + 1}`;
+ const nextYear = currentYear + 1;
+ const today = moment().format('DD/MM/YYYY');
+ const departmentName = submission.user.department.name;
 
-    // Commented out the letter generation logic to disable it
-    if (dto.status === 'VALIDATED' && !jobConfirmationLetterUrl) {
-       const currentYear = new Date().getFullYear();
-      const yearRange = currentYear === 2025 ? '2024/2025' : `${currentYear}/${currentYear + 1}`;
-      const nextYear = currentYear + 1;
-      const today = moment().format('DD/MM/YYYY');
-      const departmentName = submission.user.department.name;
+ // Fetch the signature path from the user record
+ const user = await prisma.user.findUnique({
+ where: { id: userId, deletedAt: null },
+ select: { signaturePath: true },
+ });
+ if (!user || !user.signaturePath) {
+ throw new HttpException(
+ `No signature found for user ${userId}`,
+ HttpStatus.BAD_REQUEST,
+ );
+ }
 
-   // Fetch the signature path from the user record
-      const user = await prisma.user.findUnique({
-        where: { id: userId, deletedAt: null },
-        select: { signaturePath: true },
-      });
-      if (!user || !user.signaturePath) {
-        throw new HttpException(
-          `No signature found for user ${userId}`,
-          HttpStatus.BAD_REQUEST,
-        );
-      }
+ let signatureBase64;
+ try {
+ signatureBase64 = getBase64Image(user.signaturePath);
+ } catch (error) {
+ throw new HttpException(
+ `Failed to load signature for user ${userId}: ${error.message}`,
+ HttpStatus.INTERNAL_SERVER_ERROR,
+ );
+ }
 
-      let signatureBase64;
-      try {
-        signatureBase64 = getBase64Image(user.signaturePath);
-      } catch (error) {
-        throw new HttpException(
-          `Failed to load signature for user ${userId}: ${error.message}`,
-          HttpStatus.INTERNAL_SERVER_ERROR,
-        );
-      }
+ // Define PDF document
+ const docDefinition = {
+ background: [
+ {
+ image: 'letterhead',
+ width: 595,
+ absolutePosition: { x: 0, y: 0 },
+ },
+ ],
+ content: [
+ { text: '', bold: true, fontSize: 14, alignment: 'center', margin: [0, 0, 0, 20] },
+ { text: '', alignment: 'right', fontSize: 11, margin: [0, 0, 0, 5] },
+ { text: '', alignment: 'right', fontSize: 11, margin: [0, 0, 0, 20] },
+ { text: '', fontSize: 11, margin: [0, 0, 0, 20] },
+ {
+ text: today,
+ alignment: 'right',
+ fontSize: 11,
+ margin: [0, 0, 0, 10],
+ },
+ {
+ text: [
+ { text: `${submission.fullName.toUpperCase()}`, bold: true },
+ '\n',
+ { text: `NATIONAL SERVICE PERSON`, bold: true },
+ '\n\n',
+ { text: `TEL: ${submission.phoneNumber}`, bold: true },
+ ],
+ fontSize: 11,
+ margin: [0, 20, 0, 5],
+ },
+ {
+ text: `APPOINTMENT – NATIONAL SERVICE ${yearRange}`,
+ bold: true,
+ fontSize: 12,
+ alignment: 'left',
+ decoration: 'underline',
+ margin: [0, 10, 0, 20],
+ },
+ {
+ text: [
+ 'We are pleased to inform you have been accepted to undertake your National Service at the ',
+ { text: `${departmentName} Department, ${submission.divisionPostedTo}`, bold: true },
+ ' with effect from ',
+ { text: `Friday, November 1, ${currentYear} to Friday, October 31, ${nextYear}`, bold: true },
+ '.',
+ ],
+ fontSize: 11,
+ margin: [0, 0, 0, 10],
+ },
+ {
+ text: [
+ 'You will be subjected to Ghana Cocoa Board and National Service rules and regulations during',
+ 'your service year.',
+ ],
+ fontSize: 11,
+ margin: [0, 0, 0, 10],
+ },
+ {
+ text: [
+ 'Ghana Cocoa Board will pay your National Service Allowance of ',
+ { text: 'Seven Hundred and Fifteen Ghana Cedis, Fifty-Seven Pesewas (GHc 715.57)', bold: true },
+ ' per month.',
+ ],
+ fontSize: 11,
+ margin: [0, 0, 0, 10],
+ },
+ {
+ text: 'You will not be covered by the Board’s Insurance Scheme during the period of your Service with the Board.',
+ fontSize: 11,
+ margin: [0, 0, 0, 10],
+ },
+ {
+ text: 'We hope you will work diligently and comport yourself during the period for our mutual benefit.',
+ fontSize: 11,
+ margin: [0, 0, 0, 10],
+ },
+ {
+ text: 'Kindly report with your Bank Account Details either on a bank statement, copy of cheque leaflet or pay-in-slip.',
+ fontSize: 11,
+ margin: [0, 0, 0, 10],
+ bold: true,
+ },
+ {
+ text: [
+ 'You will be entitled to one (1) month terminal leave in ',
+ { text: `October ${nextYear}`, bold: true },
+ '.',
+ ],
+ fontSize: 11,
+ margin: [0, 0, 0, 10],
+ },
+ {
+ text: 'Please report to the undersigned for further directives.\nYou can count on our co-operation.',
+ fontSize: 11,
+ margin: [0, 0, 0, 10],
+ },
+ {
+ image: 'signature',
+ width: 120,
+ alignment: 'left',
+ margin: [0, 0, 0, 5],
+ },
+ { text: 'PAZ OWUSU BOAKYE (MRS.)', bold: true, fontSize: 11, margin: [0, 0, 0, 5] },
+ { text: 'DEPUTY DIRECTOR, HUMAN RESOURCE', fontSize: 11, margin: [0, 0, 0, 10] },
+ { text: 'FOR: DIRECTOR, HUMAN RESOURCE\n cc: Director, Human Resource\n Director, Finance\n Info. Systems Manager\n', fontSize: 11, margin: [0, 0, 0, 0] },
+ ],
+ images: {
+ ...(letterheadBase64 ? { letterhead: `data:image/png;base64,${letterheadBase64}` } : {}),
+ signature: `data:image/png;base64,${signatureBase64}`,
+ },
+ defaultStyle: {
+ font: 'Roboto',
+ fontSize: 11,
+ },
+ pageMargins: [40, 100, 40, 60],
+ };
 
-      // Define PDF document
-      const docDefinition = {
-          background: [
-    {
-      image: 'letterhead',
-      width: 595,   // A4 page width in points (72dpi) → adjust to fit
-      absolutePosition: { x: 0, y: 0 }, // start top-left corner
-    },
-  ],
-    content: [
-      { text: '', bold: true, fontSize: 14, alignment: 'center', margin: [0, 0, 0, 20] },
-      { text: ``, alignment: 'right', fontSize: 11, margin: [0, 0, 0, 5] },
-      { text: ``, alignment: 'right', fontSize: 11, margin: [0, 0, 0, 20] },
-      { text: ``, fontSize: 11, margin: [0, 0, 0, 20] },
-        {
-          text: today,
-          alignment: 'right',
-          fontSize: 11,
-          margin: [0, 0, 0, 10],
-        },
-             {
-        text: [
-          { text: `${submission.fullName.toUpperCase()}`, bold: true },
-          '\n',
-          { text: `NATIONAL SERVICE PERSON`, bold: true },
-          '\n\n',
-          { text: `TEL: ${submission.phoneNumber}`, bold: true  },
-        ],
-        fontSize: 11,
-        margin: [0, 20, 0, 5],
-      },
-      {
-        text: `APPOINTMENT – NATIONAL SERVICE ${yearRange}`,
-        bold: true,
-        fontSize: 12,
-        alignment: 'left',
-        decoration: 'underline',
-        margin: [0, 10, 0, 20],
-      },
-      {
-        text: [
-          'We are pleased to inform you have been accepted to undertake your National Service at the ',
-          { text: `${departmentName} Department, ${submission.divisionPostedTo}`, bold: true },
-          ' with effect from ',
-          { text: `Friday, November 1, ${currentYear} to Friday, October 31, ${nextYear}`, bold: true },
-          '.',
-        ],
-        fontSize: 11,
-        margin: [0, 0, 0, 10],
-      },
-      {
-        text: [
-          'You will be subjected to Ghana Cocoa Board and National Service rules and regulations during',
-          'your service year.',
-        ],
-        fontSize: 11,
-        margin: [0, 0, 0, 10],
-      },
-        {
-        text: [
-          'Ghana Cocoa Board will pay your National Service Allowance of ',
-          { text: 'Seven Hundred and Fifteen Ghana Cedis, Fifty-Seven Pesewas (GHc 715.57)', bold: true },
-          ' per month.',
-        ],
-        fontSize: 11,
-        margin: [0, 0, 0, 10],
-      },
-      {
-        text: 'You will not be covered by the Board’s Insurance Scheme during the period of your Service with the Board.',
-        fontSize: 11,
-        margin: [0, 0, 0, 10],
-      },
-      {
-        text: 'We hope you will work diligently and comport yourself during the period for our mutual benefit.',
-        fontSize: 11,
-        margin: [0, 0, 0, 10],
-      },
-      {
-        text: 'Kindly report with your Bank Account Details either on a bank statement, copy of cheque leaflet or pay-in-slip.',
-        fontSize: 11,
-        margin: [0, 0, 0, 10],
-        bold: true,
-      },
-      {
-        text: [
-          'You will be entitled to one (1) month terminal leave in ',
-          { text: `October ${nextYear}`, bold: true },
-          '.',
-        ],
-        fontSize: 11,
-        margin: [0, 0, 0, 10],
-      },
-      {
-        text: 'Please report to the undersigned for further directives.\nYou can count on our co-operation.',
-        fontSize: 11,
-        margin: [0, 0, 0, 10],
-      },
-       {
-      image: 'signature',
-      width: 120,  // adjust size
-      alignment: 'left',
-      margin: [0, 0, 0, 5],
-    },
+ // Generate PDF and upload to local storage
+ const pdfDoc = (pdfMake as any).createPdf(docDefinition, null, fonts);
+ const pdfBuffer: Buffer = await new Promise((resolve) => {
+ pdfDoc.getBuffer((buffer: Buffer) => resolve(buffer));
+ });
 
-      { text: 'PAZ OWUSU BOAKYE (MRS.)', bold: true, fontSize: 11, margin: [0, 0, 0, 5] },
-      { text: 'DEPUTY DIRECTOR, HUMAN RESOURCE', fontSize: 11, margin: [0, 0, 0, 10] },
-      { text: 'FOR: DIRECTOR, HUMAN RESOURCE\n cc:  Director, Human Resource\n Director, Finance\n Info. Systems Manager\n', fontSize: 11, margin: [0, 0, 0, 0] },
-    ],
-    
-      images: {
-    ...(letterheadBase64 ? { letterhead: `data:image/png;base64,${letterheadBase64}` } : {}),
-    signature: `data:image/png;base64,${signatureBase64}`,
-  },
-    defaultStyle: {
-      font: 'Roboto',
-      fontSize: 11,
-    },
-    pageMargins: [40, 100, 40, 60],
-  };
+ const fileName = `job-confirmation-letters/${submissionId}-${Date.now()}-${Math.random().toString(36).slice(2)}.pdf`;
+ jobConfirmationLetterUrl = await this.localStorageService.uploadFile(
+ pdfBuffer,
+ fileName,
+ );
+ }
 
-      // Generate PDF and upload to Supabase
-  const pdfDoc = (pdfMake as any).createPdf(docDefinition, null, fonts);
-const pdfBuffer: Buffer = await new Promise((resolve) => {
-        pdfDoc.getBuffer((buffer: Buffer) => resolve(buffer));
-      });
+ if (dto.status === 'REJECTED') {
+ // Send rejection email
+ await this.notificationsService.sendRejectionEmail(
+ submission.email,
+ submission.fullName,
+ submissionId,
+ dto.comment || 'No specific reason provided'
+ );
 
-      const fileName = `job-confirmation-letters/${submissionId}-${Date.now()}-${Math.random().toString(36).slice(2)}.pdf`;
-      jobConfirmationLetterUrl = await this.localStorageService.uploadFile(
-        pdfBuffer,
-        fileName,
-      );
-    }
+ // Create audit log for rejection
+ await prisma.auditLog.create({
+ data: {
+ submissionId,
+ action: 'STATUS_CHANGED_TO_REJECTED',
+ userId,
+ details: `${dto.comment || `Submission status changed to REJECTED`}`,
+ createdAt: new Date(),
+ },
+ });
 
-    const updatedSubmission = await prisma.submission.update({
-      where: { id: submissionId, deletedAt: null },
-      data: {
-        status: dto.status,
-        jobConfirmationLetterUrl,
-        updatedAt: new Date(),
-      },
-      select: { id: true, userId: true, fullName: true, nssNumber: true, email: true, status: true, jobConfirmationLetterUrl: true },
-    });
+ // Create notification for the user being deleted
+ await prisma.notification.create({
+ data: {
+ title: 'Submission Rejected',
+ description: `Your submission (ID: ${submissionId}) has been rejected.`,
+ timestamp: new Date(),
+ iconType: 'USER',
+ role: 'PERSONNEL',
+ userId: submission.userId,
+ },
+ });
 
-    await prisma.auditLog.create({
-      data: {
-        submissionId,
-        action: `STATUS_CHANGED_TO_${dto.status}`,
-        userId,
-        details: `${dto.comment || `Submission status changed to ${dto.status}`}${
-          dto.status === 'VALIDATED' && jobConfirmationLetterUrl ? ' and job confirmation letter generated' : ''
-        }`,
-        createdAt: new Date(),
-      },
-    });
+ // Create notification for the admin/staff
+ await prisma.notification.create({
+ data: {
+ title: 'Submission Rejected',
+ description: `Submission (ID: ${submissionId}, NSS: ${submission.nssNumber}) rejected by ${user.name}.`,
+ timestamp: new Date(),
+ iconType: 'SETTING',
+ role: user.role === 'ADMIN' ? 'ADMIN' : 'STAFF',
+ },
+ });
 
-    if (['ENDORSED', 'VALIDATED', 'COMPLETED'].includes(dto.status)) {
-      await prisma.notification.create({
-        data: {
-          title: `Submission ${dto.status}`,
-          description: `Your submission has been ${dto.status.toLowerCase()}.`,
-          timestamp: new Date(),
-          iconType: 'USER',
-          role: 'PERSONNEL',
-          userId: updatedSubmission.userId,
-        },
-      });
-    }
+ await prisma.user.delete({
+ where: { id: submission.userId },
+ });
 
-     if (dto.status === 'REJECTED') {
-      await this.notificationsService.sendRejectionEmail(
-        updatedSubmission.email,
-        updatedSubmission.fullName,
-        submissionId,
-        dto.comment || 'No specific reason provided'
-      );
-    }
+ return { 
+ message: `Submission (ID: ${submissionId}) rejected.` 
+ };
+ }
 
-    await prisma.notification.create({
-      data: {
-        title: `Submission Status Updated`,
-        description: `Submission (ID: ${submissionId}, NSS: ${submission.nssNumber}) status changed to ${dto.status} by ${user.name}.`,
-        timestamp: new Date(),
-        iconType: 'SETTING',
-        role: user.role === 'ADMIN' ? 'ADMIN' : 'STAFF',
-      },
-    });
+ const updatedSubmission = await prisma.submission.update({
+ where: { id: submissionId, deletedAt: null },
+ data: {
+ status: dto.status,
+ jobConfirmationLetterUrl,
+ updatedAt: new Date(),
+ },
+ select: { id: true, userId: true, fullName: true, nssNumber: true, email: true, status: true, jobConfirmationLetterUrl: true },
+ });
 
-    return updatedSubmission;
-  }, { timeout: 20000 });
+ await prisma.auditLog.create({
+ data: {
+ submissionId,
+ action: `STATUS_CHANGED_TO_${dto.status}`,
+ userId,
+ details: `${dto.comment || `Submission status changed to ${dto.status}`}${
+ dto.status === 'VALIDATED' && jobConfirmationLetterUrl ? ' and job confirmation letter generated' : ''
+ }`,
+ createdAt: new Date(),
+ },
+ });
+
+ if (['ENDORSED', 'VALIDATED', 'COMPLETED'].includes(dto.status)) {
+ await prisma.notification.create({
+ data: {
+ title: `Submission ${dto.status}`,
+ description: `Your submission has been ${dto.status.toLowerCase()}.`,
+ timestamp: new Date(),
+ iconType: 'USER',
+ role: 'PERSONNEL',
+ userId: updatedSubmission.userId,
+ },
+ });
+ }
+
+ await prisma.notification.create({
+ data: {
+ title: `Submission Status Updated`,
+ description: `Submission (ID: ${submissionId}, NSS: ${submission.nssNumber}) status changed to ${dto.status} by ${user.name}.`,
+ timestamp: new Date(),
+ iconType: 'SETTING',
+ role: user.role === 'ADMIN' ? 'ADMIN' : 'STAFF',
+ },
+ });
+
+ return updatedSubmission;
+ }, { timeout: 20000 });
 }
 
 // New endpoint to handle signature upload for appointment letter
@@ -1411,7 +1565,7 @@ async uploadAppointmentSignature(userId: number, file: Express.Multer.File) {
     throw new HttpException('Only PERSONNEL can access this endpoint', HttpStatus.FORBIDDEN);
   }
 
-  const submission = await this.prisma.submission.findUnique({
+  const submission = await this.prisma.submission.findFirst({
     where: { userId },
     select: { id: true, status: true, deletedAt: true },
   });
@@ -1630,7 +1784,7 @@ async updateDepartment(departmentId: number, dto: UpdateDepartmentDto, requester
     });
   }
 
- async deleteStaff(staffId: number, requesterId: number) {
+async deleteStaff(staffId: number, requesterId: number) {
   const requester = await this.prisma.user.findUnique({
     where: { id: requesterId, deletedAt: null },
     select: { role: true },
@@ -1653,7 +1807,7 @@ async updateDepartment(departmentId: number, dto: UpdateDepartmentDto, requester
     throw new HttpException('Cannot delete your own account', HttpStatus.BAD_REQUEST);
   }
 
-  // Optional: Check for supervised departments (uncomment if needed)
+  // Check for supervised departments
   // const supervisedDepartments = await this.prisma.department.count({
   //   where: { supervisorId: staffId, deletedAt: null },
   // });
@@ -1662,35 +1816,22 @@ async updateDepartment(departmentId: number, dto: UpdateDepartmentDto, requester
   // }
 
   return this.prisma.$transaction(async (prisma) => {
-    // Soft delete the user and clear unique fields
-    const deletedStaff = await prisma.user.update({
-      where: { id: staffId },
-      data: {
-        deletedAt: new Date(),
-        nssNumber: null, // Clear unique field
-        staffId: null,   // Clear unique field
-        email: null,
-        phoneNumber: null,
-        name: null,
-      },
-      select: { id: true, name: true, staffId: true, nssNumber: true, email: true, role: true },
-    });
-
     // Log the original credentials in the audit log for traceability
     await prisma.auditLog.create({
       data: {
         submissionId: null,
         action: 'STAFF_DELETED',
         userId: requesterId,
-        details: `Admin (ID: ${requesterId}) soft-deleted staff (ID: ${staffId}, Name: ${staff.name}, Email: ${staff.email}, Staff ID: ${staff.staffId})`,
+        details: `Admin (ID: ${requesterId}) deleted staff (Name: ${staff.name}, Staff ID: ${staff.staffId})`,
         createdAt: new Date(),
       },
     });
 
+    // Create notification for the staff being deleted
     await prisma.notification.create({
       data: {
-        title: 'Account Deactivated',
-        description: `Your account has been deactivated by admin.`,
+        title: 'Account Deleted',
+        description: `Your account has been deleted by admin.`,
         timestamp: new Date(),
         iconType: 'USER',
         role: staff.role,
@@ -1698,21 +1839,27 @@ async updateDepartment(departmentId: number, dto: UpdateDepartmentDto, requester
       },
     });
 
+    // Create notification for the admin
     await prisma.notification.create({
       data: {
-        title: 'Staff Account Deactivated',
-        description: `Staff (ID: ${staffId}, Name: ${staff.name}) account deactivated by Admin (ID: ${requesterId}).`,
+        title: 'Staff Account Deleted',
+        description: `Staff (Name: ${staff.name}) account deleted by Admin (ID: ${requesterId}).`,
         timestamp: new Date(),
         iconType: 'SETTING',
         role: 'ADMIN',
       },
     });
 
-    return { message: `Staff (ID: ${staffId}) successfully deactivated` };
+    // Hard delete the user
+    await prisma.user.delete({
+      where: { id: staffId },
+    });
+
+    return { message: `Staff (ID: ${staffId}) successfully deleted` };
   });
 }
 
-  async deleteDepartment(departmentId: number, requesterId: number) {
+ async deleteDepartment(departmentId: number, requesterId: number) {
   const requester = await this.prisma.user.findUnique({
     where: { id: requesterId, deletedAt: null },
     select: { role: true },
@@ -1740,48 +1887,48 @@ async updateDepartment(departmentId: number, dto: UpdateDepartmentDto, requester
   }
 
   return this.prisma.$transaction(async (prisma) => {
-    const deletedDepartment = await prisma.department.update({
-      where: { id: departmentId },
-      data: { deletedAt: new Date(), name: null },
-      select: { id: true, name: true, supervisorId: true },
-    });
-
+    // Log the deletion in the audit log
     await prisma.auditLog.create({
       data: {
         submissionId: null,
         action: 'DEPARTMENT_DELETED',
         userId: requesterId,
-        details: `Admin (ID: ${requesterId}) soft-deleted department (ID: ${departmentId}, Name: ${deletedDepartment.name})`,
+        details: `Admin (ID: ${requesterId}) deleted department (ID: ${departmentId}, Name: ${department.name})`,
         createdAt: new Date(),
       },
     });
 
-    if (deletedDepartment.supervisorId) {
+    if (department.supervisorId) {
       await prisma.notification.create({
         data: {
-          title: 'Department Deactivated',
-          description: `The department ${deletedDepartment.name} (ID: ${departmentId}) you supervised has been deactivated.`,
+          title: 'Department Deleted',
+          description: `The department ${department.name} (ID: ${departmentId}) you supervised has been deleted.`,
           timestamp: new Date(),
           iconType: 'USER',
           role: 'STAFF',
-          userId: deletedDepartment.supervisorId,
+          userId: department.supervisorId,
         },
       });
     }
 
     await prisma.notification.create({
       data: {
-        title: 'Department Deactivated',
-        description: `Department (ID: ${departmentId}, Name: ${deletedDepartment.name}) deactivated by Admin (ID: ${requesterId}).`,
+        title: 'Department Deleted',
+        description: `Department (ID: ${departmentId}, Name: ${department.name}) deleted by Admin (ID: ${requesterId}).`,
         timestamp: new Date(),
         iconType: 'SETTING',
         role: 'ADMIN',
       },
     });
 
-    return { message: `Department (ID: ${departmentId}) successfully deactivated` };
+    // Hard delete the department
+    await prisma.department.delete({
+      where: { id: departmentId },
     });
-  }
+
+    return { message: `Department (ID: ${departmentId}) successfully deleted` };
+  });
+}
 
   async changePersonnelDepartment(dto: ChangePersonnelDepartmentDto, requesterId: number) {
   const requester = await this.prisma.user.findUnique({

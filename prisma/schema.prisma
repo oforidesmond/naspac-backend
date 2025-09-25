@@ -9,25 +9,25 @@ datasource db {
 
 model User {
   id                  Int           @id @default(autoincrement())
-  name                String? 
+  name                String?
   nssNumber           String?       @unique
-  signage             String?  
-  stamp               String?      
-  stampHeight         Int?    
-  stampWidth          Int?   
-  sigHeight           Int?    
-  sigWidth            Int?   
+  signage             String?
+  stamp               String?
+  stampHeight         Int?
+  stampWidth          Int?
+  sigHeight           Int?
+  sigWidth            Int?
   staffId             String?       @unique
   email               String?       @unique
   signaturePath       String?
   phoneNumber         String?
   tfaSecret           String?
-  isTfaEnabled        Boolean       @default(false) // Added to track 2FA status
+  isTfaEnabled        Boolean       @default(false)
   password            String?
   role                Role          @default(PERSONNEL)
-  departmentId        Int?    
-  unitId              Int?        
-  supervisorId        Int?        
+  departmentId        Int?
+  unitId              Int?
+  supervisorId        Int?
   createdAt           DateTime      @default(now())
   updatedAt           DateTime      @updatedAt
   deletedAt           DateTime?
@@ -35,18 +35,18 @@ model User {
   documents           Document[]    @relation("SignedDocuments")
   passwordResetTokens PasswordResetToken[]
   OnboardingToken     OnboardingToken[]
-  department          Department?   @relation("UserDepartment", fields: [departmentId], references: [id])
-  unit                Unit?         @relation("UserUnit", fields: [unitId], references: [id])
-  supervisor          User?         @relation("SupervisorPersonnel", fields: [supervisorId], references: [id])
+  department          Department?   @relation("UserDepartment", fields: [departmentId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  unit                Unit?         @relation("UserUnit", fields: [unitId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  supervisor          User?         @relation("SupervisorPersonnel", fields: [supervisorId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   supervisedPersonnel User[]        @relation("SupervisorPersonnel")
   departmentsSupervised Department[] @relation("DepartmentSupervisor")
   templatesCreated    Template[]    @relation("UserTemplates")
-  notifications       Notification[] 
+  notifications       Notification[]
 }
 
 model Submission {
   id                  Int           @id @default(autoincrement())
-  userId              Int           @unique
+  userId              Int
   fullName            String
   nssNumber           String
   gender              Gender
@@ -66,7 +66,7 @@ model Submission {
   createdAt           DateTime      @default(now())
   updatedAt           DateTime      @updatedAt
   deletedAt           DateTime?
-  user                User          @relation(fields: [userId], references: [id])
+  user                User          @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   documents           Document[]
   auditLogs           AuditLog[]
   @@unique([userId, nssNumber])
@@ -74,35 +74,35 @@ model Submission {
 
 model Template {
   id           Int       @id @default(autoincrement())
-  name         String  
-  type         String   
-  fileUrl      String   
+  name         String
+  type         String
+  fileUrl      String
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
-  createdBy    Int     
-  user         User      @relation("UserTemplates", fields: [createdBy], references: [id])
+  createdBy    Int
+  user         User      @relation("UserTemplates", fields: [createdBy], references: [id], onDelete: Cascade, onUpdate: Cascade)
 }
 
 model Department {
   id                  Int           @id @default(autoincrement())
   name                String        @unique
-  supervisorId        Int 
+  supervisorId        Int
   createdAt           DateTime      @default(now())
   updatedAt           DateTime      @updatedAt
   deletedAt           DateTime?
   users               User[]        @relation("UserDepartment")
   units               Unit[]        @relation("DepartmentUnits")
-  supervisor          User          @relation("DepartmentSupervisor", fields: [supervisorId], references: [id])
+  supervisor          User          @relation("DepartmentSupervisor", fields: [supervisorId], references: [id], onUpdate: Cascade)
 }
 
 model Unit {
   id                  Int           @id @default(autoincrement())
   name                String        @unique
-  departmentId        Int?      
+  departmentId        Int?
   createdAt           DateTime      @default(now())
   updatedAt           DateTime      @updatedAt
   deletedAt           DateTime?
-  department          Department?   @relation("DepartmentUnits", fields: [departmentId], references: [id])
+  department          Department?   @relation("DepartmentUnits", fields: [departmentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   users               User[]        @relation("UserUnit")
 }
 
@@ -110,12 +110,12 @@ model Document {
   id                  Int           @id @default(autoincrement())
   submissionId        Int
   adminId             Int
-  originalUrl         String     
-  signedUrl           String     
-  documentHash        String     
+  originalUrl         String
+  signedUrl           String
+  documentHash        String
   signedAt            DateTime      @default(now())
-  submission          Submission    @relation(fields: [submissionId], references: [id])
-  admin               User          @relation("SignedDocuments", fields: [adminId], references: [id])
+  submission          Submission    @relation(fields: [submissionId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  admin               User          @relation("SignedDocuments", fields: [adminId], references: [id], onUpdate: Cascade)
 }
 
 model AuditLog {
@@ -125,7 +125,7 @@ model AuditLog {
   userId              Int?
   details             String?
   createdAt           DateTime      @default(now())
-  submission          Submission?    @relation(fields: [submissionId], references: [id])
+  submission          Submission?   @relation(fields: [submissionId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 }
 
 model PasswordResetToken {
@@ -135,7 +135,7 @@ model PasswordResetToken {
   expiresAt           DateTime
   createdAt           DateTime      @default(now())
   deletedAt           DateTime?
-  user                User          @relation(fields: [userId], references: [id])
+  user                User          @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 }
 
 model OnboardingToken {
@@ -147,7 +147,7 @@ model OnboardingToken {
   used                Boolean       @default(false)
   createdAt           DateTime      @default(now())
   deletedAt           DateTime?
-  user                User          @relation(fields: [userId], references: [id])
+  user                User          @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 }
 
 model Notification {
@@ -156,9 +156,9 @@ model Notification {
   description String
   timestamp   DateTime  @default(now())
   iconType    IconType
-  role        String  
-  userId      Int?    
-  user        User?     @relation(fields: [userId], references: [id])
+  role        String
+  userId      Int?
+  user        User?     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 }

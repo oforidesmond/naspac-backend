@@ -275,7 +275,7 @@ export class DocumentsService {
     throw new HttpException('Only PERSONNEL can access this endpoint', HttpStatus.FORBIDDEN);
   }
 
-  const submission = await this.prisma.submission.findUnique({
+  const submission = await this.prisma.submission.findFirst({
     where: { userId },
     select: { id: true, status: true, deletedAt: true, appointmentLetterUrl: true, jobConfirmationLetterUrl: true },
   });

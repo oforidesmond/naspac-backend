@@ -1,4 +1,4 @@
-import { Controller, Post, Body, UseGuards, Request, Get, Req, HttpException, HttpStatus, Param } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, Request, Get, Req, HttpException, HttpStatus, Param, Delete } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { RateLimitGuard } from './rate-limit.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -99,6 +99,54 @@ export class AuthController {
       body.password,
       body.confirmPassword,
     );
+  }
+
+  @Get('onboarded')
+  async getOnboardedUsers() {
+    try {
+      return await this.authService.getOnboardedUsers();
+    } catch (error) {
+      throw new HttpException(
+        'Failed to fetch onboarded users',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Delete('onboarded/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  async deleteOnboardedUser(@Param('id') id: string, @Request() req) {
+    try {
+      const userRole = req.user.role;
+      if (!['STAFF', 'ADMIN'].includes(userRole)) {
+        throw new HttpException('Unauthorized: Only staff or admins can delete users', HttpStatus.FORBIDDEN);
+      }
+      await this.authService.deleteOnboardedUser(parseInt(id), req.user.id);
+      return { message: 'User deleted successfully' };
+    } catch (error) {
+      throw new HttpException(
+        error.message || 'Failed to delete onboarded user',
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Post('renew-token/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  async renewOnboardingToken(@Param('id') id: string, @Request() req) {
+    try {
+      const userRole = req.user.role;
+      if (!['STAFF', 'ADMIN'].includes(userRole)) {
+        throw new HttpException('Unauthorized: Only staff or admins can renew tokens', HttpStatus.FORBIDDEN);
+      }
+      const result = await this.authService.renewOnboardingToken(parseInt(id), req.user.id);
+      return { message: 'Onboarding token renewed and email sent', email: result.email };
+    } catch (error) {
+      throw new HttpException(
+        error.message || 'Failed to renew onboarding token',
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
   }
 
   // Debug endpoint to check user 2FA status

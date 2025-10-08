@@ -229,7 +229,7 @@ async loginStaffAdmin(staffId: string, password: string) {
     });
 
     const token = crypto.randomBytes(32).toString('hex');
-    const expiresAt = new Date(Date.now() + 1 * 60 * 60 * 1000); // 1 hour expiry
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours expiry
 
     await this.prisma.onboardingToken.create({
       data: {
@@ -243,6 +243,126 @@ async loginStaffAdmin(staffId: string, password: string) {
     await this.notificationsService.sendOnboardingEmail(email, nssNumberWithYear, token);
 
     return { message: 'Onboarding link sent to email', email };
+  }
+
+ async getOnboardedUsers() {
+  const now = new Date();
+  const startOfYear = new Date(now.getFullYear(), 0, 1);
+  const endOfYear = new Date(now.getFullYear() + 1, 0, 1);
+
+  const users = await this.prisma.user.findMany({
+    where: {
+      role: "PERSONNEL",
+      OnboardingToken: {
+        some: {},
+      },
+      createdAt: {
+        gte: startOfYear,
+        lt: endOfYear,
+      },
+    },
+    select: {
+      id: true,
+      name: true,
+      nssNumber: true,
+      email: true,
+      phoneNumber: true,
+      createdAt: true,
+      OnboardingToken: {
+        select: {
+          token: true,
+          expiresAt: true,
+          used: true,
+          createdAt: true,
+        },
+      },
+    },
+  });
+
+  return users.map(user => ({
+    id: user.id,
+    name: user.name || 'N/A',
+    nssNumber: user.nssNumber,
+    email: user.email,
+    phoneNumber: user.phoneNumber,
+    onboardingToken: user.OnboardingToken[0]?.token || 'N/A',
+    tokenCreatedAt: user.OnboardingToken[0]?.createdAt || null,
+    tokenExpiresAt: user.OnboardingToken[0]?.expiresAt || null,
+    tokenUsed: user.OnboardingToken[0]?.used || false,
+    userCreatedAt: user.createdAt,
+  }));
+}
+
+  async deleteOnboardedUser(userId: number, initiatorId: number) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { OnboardingToken: true },
+    });
+
+    if (!user || !user.OnboardingToken.length) {
+      throw new HttpException('User not found or not onboarded', HttpStatus.NOT_FOUND);
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.user.delete({
+          where: { id: userId },
+        }),
+      // Log the action in AuditLog
+      this.prisma.auditLog.create({
+        data: {
+          action: 'DELETE_ONBOARDED_USER',
+          userId: initiatorId,
+          details: `User with NSS Number ${user.nssNumber} deleted for re-onboarding`,
+        },
+      }),
+    ]);
+  }
+
+  async renewOnboardingToken(userId: number, initiatorId: number) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { OnboardingToken: true },
+    });
+
+    if (!user || !user.OnboardingToken.length) {
+      throw new HttpException('User not found or not onboarded', HttpStatus.NOT_FOUND);
+    }
+
+    if (user.deletedAt) {
+      throw new HttpException('User is deleted and cannot have their token renewed', HttpStatus.BAD_REQUEST);
+    }
+
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours expiry
+
+    await this.prisma.$transaction([
+      // Delete existing onboarding tokens
+      this.prisma.onboardingToken.deleteMany({
+        where: { userId },
+      }),
+      // Create new onboarding token
+      this.prisma.onboardingToken.create({
+        data: {
+          token,
+          nssNumber: user.nssNumber,
+          userId,
+          expiresAt,
+        },
+      }),
+      // Log the action
+      this.prisma.auditLog.create({
+        data: {
+          action: 'RENEW_ONBOARDING_TOKEN',
+          userId: initiatorId,
+          details: `Onboarding token renewed for user with NSS Number ${user.nssNumber}`,
+        },
+      }),
+    ]);
+
+    // Send onboarding email
+    await this.notificationsService.sendOnboardingEmail(user.email, user.nssNumber, token);
+
+    return { email: user.email };
   }
 
   async onboardingResetPassword(nssNumber: string, token: string, password: string, confirmPassword: string) {
@@ -261,12 +381,12 @@ async loginStaffAdmin(staffId: string, password: string) {
       onboardingToken.used ||
       onboardingToken.expiresAt < new Date()
     ) {
-      throw new HttpException('Invalid or expired token', HttpStatus.BAD_REQUEST);
+      throw new HttpException( 'This password reset link is invalid or has expired. Please try logging in with your new password.', HttpStatus.BAD_REQUEST);
     }
 
-    if (onboardingToken.user.password) {
-      throw new HttpException('Password already set for this account', HttpStatus.BAD_REQUEST);
-    }
+    // if (onboardingToken.user.password) {
+    //   throw new HttpException('Password already set for this account', HttpStatus.BAD_REQUEST);
+    // }
 
     await this.usersService.updateUser(onboardingToken.userId, { password });
 
@@ -309,7 +429,7 @@ async loginStaffAdmin(staffId: string, password: string) {
     });
 
     if (!resetToken || resetToken.expiresAt < new Date()) {
-      throw new HttpException('Invalid or expired token', HttpStatus.BAD_REQUEST);
+      throw new HttpException('This password reset link is invalid or has expired. Please try logging in with your new password.', HttpStatus.BAD_REQUEST);
     }
 
     await this.usersService.updateUser(resetToken.userId, { password });

@@ -36,6 +36,7 @@ function getBase64Image(filePath: string): string {
     path.resolve(baseStoragePath, normalizedPath),
     path.resolve(baseStoragePath, "files", normalizedPath),
     path.resolve(baseStoragePath, "assets", normalizedPath),
+    path.resolve(baseStoragePath, "storage", normalizedPath),
   ];
 
   for (const absPath of possiblePaths) {
@@ -597,6 +598,7 @@ async getGhanaUniversities() {
          user: {
         select: {
           phoneNumber: true,
+          department: { select: { name: true } },
         },
       },
     },
@@ -605,6 +607,7 @@ async getGhanaUniversities() {
     return submissions.map((s) => ({
       ...s,
       phoneNumber: s.user?.phoneNumber || 'N/A',
+      department: s.user?.department?.name || 'N/A',
       postingLetterUrl: this.toAbsoluteFileUrl(s.postingLetterUrl),
       appointmentLetterUrl: this.toAbsoluteFileUrl(s.appointmentLetterUrl),
       verificationFormUrl: this.toAbsoluteFileUrl(s.verificationFormUrl),
@@ -661,7 +664,7 @@ async updateSubmissionStatus(
 ) {
  const user = await this.prisma.user.findUnique({ 
  where: { id: userId, deletedAt: null },
- select: { role: true, name: true } // Added name for notification
+ select: { role: true, name: true }
  });
  if (!user || !['ADMIN', 'STAFF'].includes(user.role)) {
  throw new HttpException('Unauthorized: Only ADMIN or STAFF can update submission status', HttpStatus.FORBIDDEN);
@@ -678,9 +681,9 @@ async updateSubmissionStatus(
  status: true, 
  deletedAt: true, 
  jobConfirmationLetterUrl: true, 
- phoneNumber: true, 
+//  phoneNumber: true, 
  divisionPostedTo: true, 
- user: { select: { department: true } } 
+ user: { select: { department: true, phoneNumber: true } } 
  },
  });
  if (!submission || submission.deletedAt) {
@@ -709,7 +712,6 @@ async updateSubmissionStatus(
  return this.prisma.$transaction(async (prisma) => {
  let jobConfirmationLetterUrl = submission.jobConfirmationLetterUrl;
 
- // Commented out the letter generation logic to disable it
  if (dto.status === 'VALIDATED' && !jobConfirmationLetterUrl) {
  const currentYear = new Date().getFullYear();
  const yearRange = currentYear === 2025 ? '2024/2025' : `${currentYear}/${currentYear + 1}`;
@@ -717,24 +719,47 @@ async updateSubmissionStatus(
  const today = moment().format('DD/MM/YYYY');
  const departmentName = submission.user.department.name;
 
- // Fetch the signature path from the user record
- const user = await prisma.user.findUnique({
- where: { id: userId, deletedAt: null },
- select: { signaturePath: true },
- });
- if (!user || !user.signaturePath) {
- throw new HttpException(
- `No signature found for user ${userId}`,
- HttpStatus.BAD_REQUEST,
- );
- }
+  const currentUser = await prisma.user.findUnique({
+    where: { id: userId, deletedAt: null },
+    select: { role: true, signaturePath: true },
+  });
+
+  if (!currentUser) {
+    throw new HttpException(`User ${userId} not found`, HttpStatus.NOT_FOUND);
+  }
+
+    let signaturePath: string | null = null;
+
+    if (currentUser.role === 'ADMIN' && currentUser.signaturePath) {
+      signaturePath = currentUser.signaturePath;
+    } else if (currentUser.role === 'STAFF') {
+      const adminUser = await prisma.user.findFirst({
+        where: { role: 'ADMIN', deletedAt: null, signaturePath: { not: null } },
+        select: { signaturePath: true },
+    });
+
+    if (!adminUser || !adminUser.signaturePath) {
+      throw new HttpException(
+        'No ADMIN signature available for validation',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+      signaturePath = adminUser.signaturePath;
+    } else {
+      throw new HttpException(
+        `User ${userId} is not authorized to validate submissions`,
+        HttpStatus.FORBIDDEN,
+      );
+    }
+
+  console.log('Signature path to use:', signaturePath);
 
  let signatureBase64;
  try {
- signatureBase64 = getBase64Image(user.signaturePath);
+ signatureBase64 = getBase64Image(signaturePath);
  } catch (error) {
  throw new HttpException(
- `Failed to load signature for user ${userId}: ${error.message}`,
+ `Failed to load signature for user: ${error.message}`,
  HttpStatus.INTERNAL_SERVER_ERROR,
  );
  }
@@ -765,7 +790,7 @@ async updateSubmissionStatus(
  '\n',
  { text: `NATIONAL SERVICE PERSON`, bold: true },
  '\n\n',
- { text: `TEL: ${submission.phoneNumber}`, bold: true },
+ { text: `TEL: ${submission.user.phoneNumber}`, bold: true },
  ],
  fontSize: 11,
  margin: [0, 20, 0, 5],
@@ -1514,7 +1539,7 @@ async uploadAppointmentSignature(userId: number, file: Express.Multer.File) {
         nssNumber: { endsWith: nssNumberPattern },
         OnboardingToken: {
           some: {
-            used: true,
+            // used: true,
             deletedAt: null,
           },
         },

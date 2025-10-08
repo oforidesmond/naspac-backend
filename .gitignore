@@ -48,6 +48,7 @@ lerna-debug.log*
 .temp
 .tmp
 generate-cert.js
+email-test.js
 # seed.js
 
 # Runtime data

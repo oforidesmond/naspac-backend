@@ -17,7 +17,7 @@ async function bootstrap() {
   const nodeEnv = configService.get<string>('NODE_ENV') || 'development';
 
  app.enableCors({
-  origin: ['https://nss.cocobod.net', 'http://localhost:5173'],
+  origin: ['https://nss.cocobod.net', 'http://localhost:5173', 'http://192.168.2.72:5173'],
    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
    allowedHeaders: 'Content-Type, Authorization',
    credentials: true,

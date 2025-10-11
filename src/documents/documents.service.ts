@@ -18,45 +18,44 @@ export class DocumentsService {
     private httpService: HttpService,
   ) {}
 
-  async signDocument(
-    submissionId: number,
-    fileName: string,
-    adminId: number,
-    signatureImagePath?: string,
-    stampImagePath?: string,
-    originalUrl?: string,
-  ) {
-    try {
+async signDocument(
+  submissionId: number,
+  fileName: string,
+  adminId: number,
+  signatureImagePath?: string,
+  stampImagePath?: string,
+  originalUrl?: string,
+) {
+  try {
     const submission = await this.prisma.submission.findUnique({
       where: { id: submissionId },
       select: { id: true, status: true, userId: true, user: { select: { nssNumber: true, email: true, name: true } }, appointmentLetterUrl: true, postingLetterUrl: true, createdAt: true },
     });
-      if (!submission || submission.status !== 'PENDING_ENDORSEMENT') {
-        throw new Error('Submission not found or not ready for endorsement');
-      }
+    if (!submission || submission.status !== 'PENDING_ENDORSEMENT') {
+      throw new Error('Submission not found or not ready for endorsement');
+    }
 
-      console.log('Fetching file for signing:', { fileName });
-      let fileBuffer: Buffer;
-      try {
-        fileBuffer = await this.localStorageService.getFile(fileName);
-      } catch (e) {
-        // Fallback for legacy Supabase URLs: fetch remote once and cache locally under the expected key
-        if (originalUrl && /^https?:\/\//i.test(originalUrl)) {
-          const response = await firstValueFrom(this.httpService.get(originalUrl, { responseType: 'arraybuffer' }));
-          const buffer = Buffer.from(response.data);
-          await this.localStorageService.uploadFile(buffer, fileName);
-          fileBuffer = buffer;
-        } else {
-          throw e;
-        }
+    console.log('Fetching file for signing:', { fileName });
+    let fileBuffer: Buffer;
+    try {
+      fileBuffer = await this.localStorageService.getFile(fileName);
+    } catch (e) {
+      if (originalUrl && /^https?:\/\//i.test(originalUrl)) {
+        const response = await firstValueFrom(this.httpService.get(originalUrl, { responseType: 'arraybuffer' }));
+        const buffer = Buffer.from(response.data);
+        await this.localStorageService.uploadFile(buffer, fileName);
+        fileBuffer = buffer;
+      } else {
+        throw e;
       }
-      console.log('PDF buffer size:', fileBuffer.length);
-      if (!fileBuffer || fileBuffer.length === 0) {
-        console.error('File buffer is null or empty for:', { fileName });
-        throw new Error('Failed to retrieve file from Supabase');
-      }
+    }
+    console.log('PDF buffer size:', fileBuffer.length);
+    if (!fileBuffer || fileBuffer.length === 0) {
+      console.error('File buffer is null or empty for:', { fileName });
+      throw new Error('Failed to retrieve file from Supabase');
+    }
 
-      const pdfDoc = await PDFDocument.load(fileBuffer);
+    const pdfDoc = await PDFDocument.load(fileBuffer);
 
     if (pdfDoc.getPageCount() < 4) {
       throw new Error('Appointment letter must have at least 4 pages');
@@ -64,32 +63,45 @@ export class DocumentsService {
 
     const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
-    const page = pdfDoc.getPage(2); // Third page
-  
     const thirdPage = pdfDoc.getPage(2);
     const { width, height } = thirdPage.getSize();
-    const sigWidth = 100;
-    const sigHeight = 100;
+
+    // Detect page size (A4 or A5)
+    const isA4 = Math.abs(width - 595) < 5 && Math.abs(height - 842) < 5; // Allow small tolerance for floating-point
+    const isA5 = Math.abs(width - 420) < 5 && Math.abs(height - 595) < 5;
+    console.log('Page size detection', { isA4, isA5 });
+
+    if (!isA4 && !isA5) {
+      console.warn(`Unexpected page size: ${width}x${height} points`);
+      // throw new Error('Document page size is neither A4 nor A5');
+    }
+
+    const sigWidth = 120;
+    const sigHeight = 120;
     const centerX = (width - sigWidth) / 2;
     const centerY = height / 2;
     const verticalOffset = 40;
-    const adjustedY = centerY - verticalOffset;
-      
-      // Add submission date
-      const submissionDate = new Date(submission.createdAt).toLocaleDateString('en-US', {
-        month: '2-digit',
-        day: '2-digit',
-        year: '2-digit',
-      });
-      thirdPage.drawText(`${submissionDate}`, {
-        x: centerX,
-        y: adjustedY + 135,
-        size: 12,
-        font,
-        color: rgb(0, 0, 0),
-      });
+    let adjustedY = centerY - verticalOffset;
 
-      if (signatureImagePath && stampImagePath) {
+    // Adjust Y-coordinate for A4 by shifting placements downward
+    const yShift = isA4 ? 135 : 0; // Shift down by 135 points for A4
+    adjustedY -= yShift;
+
+    // Add submission date
+    const submissionDate = new Date().toLocaleDateString('en-US', {
+      month: '2-digit',
+      day: '2-digit',
+      year: '2-digit',
+    });
+    thirdPage.drawText(`${submissionDate}`, {
+      x: centerX,
+      y: adjustedY + 135,
+      size: 12,
+      font,
+      color: rgb(0, 0, 0),
+    });
+
+    if (signatureImagePath && stampImagePath) {
       const signatureImageBuffer = await this.localStorageService.getFile(signatureImagePath);
       const stampImageBuffer = await this.localStorageService.getFile(stampImagePath);
 
@@ -112,33 +124,34 @@ export class DocumentsService {
         height: sigHeight,
       });
     } else {
-      // Fallback
+      // Fallback coordinates, adjusted for A4
       thirdPage.drawText(`${submissionDate}`, {
         x: 54,
-        y: 190,
+        y: 240 - yShift,
         size: 12,
         font,
         color: rgb(0, 0, 0),
       });
       thirdPage.drawText(`Signed by Admin ID: ${adminId}`, {
         x: 54,
-        y: 53,
+        y: 53 - yShift,
         size: 12,
         font,
         color: rgb(0, 0, 0),
       });
     }
 
-     // Fourth page
+    // Fourth page
     const fourthPage = pdfDoc.getPage(3);
     const emailText = 'cocobod@cocobod.gh';
     const phone1Text = '0302 - 661 - 752';
     const phone2Text = '0302 - 661 - 872';
     const headerText = 'GHANA COCOA BOARD';
 
-     const baseY = adjustedY + 75.83;
+    const a4FourthPageShift = isA4 ? 50 : 0;
+    const baseY = adjustedY + 75.83 - a4FourthPageShift;
 
-     fourthPage.drawText(emailText, {
+    fourthPage.drawText(emailText, {
       x: centerX,
       y: baseY,
       size: 12,
@@ -164,104 +177,103 @@ export class DocumentsService {
 
     fourthPage.drawText(headerText, {
       x: centerX,
-      y: baseY + 58.85,
+      y: baseY + 71.00,
       size: 12,
       font,
       color: rgb(0, 0, 0),
     });
 
-      const modifiedPdfBuffer = Buffer.from(await pdfDoc.save());
+    const modifiedPdfBuffer = Buffer.from(await pdfDoc.save());
 
-      const documentHash = createHash('sha256').update(modifiedPdfBuffer).digest('hex');
+    const documentHash = createHash('sha256').update(modifiedPdfBuffer).digest('hex');
 
-      const signedFileName = `signed-${fileName}`;
-      const signedUrl = await this.localStorageService.uploadFile(
-        modifiedPdfBuffer,
-        signedFileName,
-      );
+    const signedFileName = `signed-${fileName}`;
+    const signedUrl = await this.localStorageService.uploadFile(
+      modifiedPdfBuffer,
+      signedFileName,
+    );
 
-      const updatedSubmission = await this.prisma.submission.update({
-        where: { id: submissionId },
-        data: {
-          status: 'ENDORSED',
-          appointmentLetterUrl: submission.appointmentLetterUrl && fileName.includes('appointment')
-            ? signedUrl
-            : submission.appointmentLetterUrl,
-          postingLetterUrl: submission.postingLetterUrl && fileName.includes('posting')
-            ? signedUrl
-            : submission.postingLetterUrl,
-        },
-      });
+    const updatedSubmission = await this.prisma.submission.update({
+      where: { id: submissionId },
+      data: {
+        status: 'ENDORSED',
+        appointmentLetterUrl: submission.appointmentLetterUrl && fileName.includes('appointment')
+          ? signedUrl
+          : submission.appointmentLetterUrl,
+        postingLetterUrl: submission.postingLetterUrl && fileName.includes('posting')
+          ? signedUrl
+          : submission.postingLetterUrl,
+      },
+    });
 
-      const document = await this.prisma.document.create({
-        data: {
-          submissionId,
-          adminId,
-          originalUrl: await this.localStorageService.getPublicUrl(fileName),
-          signedUrl,
-          signedAt: new Date(),
-          documentHash,
-        },
-      });
-
-      await this.prisma.auditLog.create({
-        data: {
-          submissionId,
-          action: 'STATUS_CHANGED_TO_ENDORSED',
-          userId: adminId,
-          details: `Document ${signedFileName} signed for submission ${submissionId}`,
-        },
-      });
-
-       // notification for PERSONNEL
-      await this.prisma.notification.create({
-        data: {
-          title: 'Document Endorsed',
-          description: `Your document (Submission ID: ${submissionId}, NSS: ${submission.user.nssNumber || 'Unknown'}) has been endorsed successfully.`,
-          timestamp: new Date(),
-          iconType: 'USER',
-          role: 'PERSONNEL',
-          userId: submission.userId,
-        },
-      });
-
-        await this.prisma.notification.create({
-        data: {
-          title: 'Appointment Letter Endorsed',
-          description: `Appointment letter for ${submission.user.nssNumber || 'Unknown'} has been endorsed successfully.`,
-          timestamp: new Date(),
-          iconType: 'USER',
-          role: 'ADMIN',
-        },
-      });
-
-      await this.prisma.notification.create({
-        data: {
-          title: 'Appointment Letter Endorsed',
-          description: `Document (Submission ID: ${submissionId}, NSS: ${submission.user.nssNumber || 'Unknown'}) has been endorsed by Admin (ID: ${adminId}).`,
-          timestamp: new Date(),
-          iconType: 'BELL',
-          role: 'STAFF',
-        },
-      });
-
-       await this.notificationsService.sendDocumentEndorsedEmail(
-        submission.user.email,
-        submission.user.name,
-        submission.user.nssNumber || 'Unknown',
-        submissionId
-      );
-      return { signedUrl, documentId: document.id };
-    } catch (error) {
-      console.error('Error signing PDF:', {
+    const document = await this.prisma.document.create({
+      data: {
         submissionId,
-        fileName,
-        error: error.message,
-        stack: error.stack,
-      });
-      throw new Error(`Failed to sign PDF: ${error.message}`);
-    }
+        adminId,
+        originalUrl: await this.localStorageService.getPublicUrl(fileName),
+        signedUrl,
+        signedAt: new Date(),
+        documentHash,
+      },
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        submissionId,
+        action: 'STATUS_CHANGED_TO_ENDORSED',
+        userId: adminId,
+        details: `Document ${signedFileName} signed for submission ${submissionId}`,
+      },
+    });
+
+    await this.prisma.notification.create({
+      data: {
+        title: 'Document Endorsed',
+        description: `Your document (Submission ID: ${submissionId}, NSS: ${submission.user.nssNumber || 'Unknown'}) has been endorsed successfully.`,
+        timestamp: new Date(),
+        iconType: 'USER',
+        role: 'PERSONNEL',
+        userId: submission.userId,
+      },
+    });
+
+    await this.prisma.notification.create({
+      data: {
+        title: 'Appointment Letter Endorsed',
+        description: `Appointment letter for ${submission.user.nssNumber || 'Unknown'} has been endorsed successfully.`,
+        timestamp: new Date(),
+        iconType: 'USER',
+        role: 'ADMIN',
+      },
+    });
+
+    await this.prisma.notification.create({
+      data: {
+        title: 'Appointment Letter Endorsed',
+        description: `Document (Submission ID: ${submissionId}, NSS: ${submission.user.nssNumber || 'Unknown'}) has been endorsed by Admin (ID: ${adminId}).`,
+        timestamp: new Date(),
+        iconType: 'BELL',
+        role: 'STAFF',
+      },
+    });
+
+    await this.notificationsService.sendDocumentEndorsedEmail(
+      submission.user.email,
+      submission.user.name,
+      submission.user.nssNumber || 'Unknown',
+      submissionId
+    );
+    return { signedUrl, documentId: document.id };
+  } catch (error) {
+    console.error('Error signing PDF:', {
+      submissionId,
+      fileName,
+      error: error.message,
+      stack: error.stack,
+    });
+    throw new Error(`Failed to sign PDF: ${error.message}`);
   }
+}
 
   async downloadAppointmentLetter(userId: number, type: 'appointment' | 'endorsed' | 'job_confirmation') {
   const user = await this.prisma.user.findUnique({

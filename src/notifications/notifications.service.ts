@@ -13,9 +13,9 @@ export class NotificationsService {
       'send-email',
       {
         to,
-        subject: 'Welcome to NASPAC!',
+        subject: 'Welcome to COCOBOD!',
         content: `
-          <h1>Welcome to NASPAC</h1>
+          <h1>Welcome to COCOBOD</h1>
           <p>Click <a href="${this.frontendUrl}/reset-password?nssNumber=${nssNumber}&token=${token}">here</a> to set your password to access your dashboard.</p>
           <p>This link expires in 24 hours.</p>
         `,
@@ -32,7 +32,7 @@ export class NotificationsService {
       'send-email',
       {
         to,
-        subject: 'NASPAC Password Reset',
+        subject: 'COCOBOD Password Reset',
         content: `
           <h1>Password Reset Request</h1>
           <p>You requested to reset your password.</p>
@@ -57,8 +57,8 @@ export class NotificationsService {
           <h1>Thank You for Your Submission!</h1>
           <p>Dear ${fullName},</p>
           <p>Your onboarding submission has been successfully received.</p>
-          <p>We will review it and notify you of any updates. If you have any questions, please contact our support team.</p>
-          <p>Best regards,<br>NASPAC Team</p>
+          <p>We will review it and notify you of any updates. If you have any questions, please contact our support team at hr.training@cocobod.gh or call 030 266 1877.</p>
+          <p>Best regards,<br>HR Team</p>
         `,
       },
       {
@@ -78,8 +78,8 @@ export class NotificationsService {
           <p>Hi ${fullName},</p>
           <p>We're writing to let you know that we couldn't accept your National Service placement at this time. Our institution has reached its capacity, and we simply don't have any more available slots.</p>
           <p>To secure a new placement, please follow the instructions from the National Service Secretariat to go through the reposting process. We wish you the best of luck with your reposting and your service year!</p>
-          <p>If you have any questions or need further clarification, please contact our support team at support@cocobod.com</p>
-          <p>Best regards,<br>NASPAC Team</p>
+          <p>If you have any questions or need further clarification, please contact our support team at hr.training@cocobod.gh or call 030 266 1877.</p>
+          <p>Best regards,<br>HR Team</p>
         `,
       },
       {
@@ -94,13 +94,13 @@ export class NotificationsService {
       'send-email',
       {
         to,
-        subject: 'NSP Supervisor Assignment',
+        subject: 'COCOBOD Supervisor Assignment',
         content: `
           <h1>Supervisor Assignment Notification</h1>
           <p>Dear ${supervisorName},</p>
           <p>You have been assigned as the supervisor over NSPs for the <strong>${departmentName}</strong> department.</p>
           <p>Please review your responsibilities and contact the administration if you have any questions.</p>
-          <p>Best regards,<br>NASPAC Administration Team</p>
+          <p>Best regards,<br>HR Team</p>
         `,
       },
       {
@@ -121,13 +121,13 @@ export class NotificationsService {
       'send-email',
       {
         to,
-        subject: 'NSP Verification Form Submission',
+        subject: 'Regional Validated Letter Submission',
         content: `
-          <h1>New Verification Form Submission</h1>
+          <h1>New Validated Letter Submission</h1>
           <p>Dear ${staffName},</p>
-          <p>A verification form has been submitted by ${personnelName} (NSS: ${nssNumber}) for Submission ID: ${submissionId}.</p>
+          <p>A validated letter has been submitted by ${personnelName} (NSS: ${nssNumber}) for Submission ID: ${submissionId}.</p>
           <p>Please review the submission in your dashboard and take appropriate action.</p>
-          <p>Best regards,<br>NASPAC Administration Team</p>
+          <p>Best regards,<br>HR Team</p>
         `,
       },
       {
@@ -152,8 +152,8 @@ export class NotificationsService {
           <h1>Appointment Letter Endorsement Notification</h1>
           <p>Dear ${personnelName},</p>
           <p>Your appointment letter has been successfully endorsed.</p>
-          <p>Please check your dashboard for further details or contact the administration if you have any questions.</p>
-          <p>Best regards,<br>NASPAC Administration Team</p>
+          <p>Please check your dashboard for further details or contact the administration at hr.training@cocobod.gh or call 030 266 1877, should you have any questions.</p>
+          <p>Best regards,<br>HR Team</p>
         `,
       },
       {
@@ -168,14 +168,14 @@ export class NotificationsService {
       'send-email',
       {
         to,
-        subject: 'NASPAC OTP Verification',
+        subject: 'COCOBOD OTP Verification',
         content: `
           <h1>OTP Verification Code</h1>
           <p>Dear ${name},</p>
           <p>Your OTP verification code is: <strong>${otp}</strong></p>
           <p>This code expires in 3 minutes. Please enter it in your dashboard to complete the verification process.</p>
           <p>If you did not request this code, please ignore this email and contact support immediately.</p>
-          <p>Best regards,<br>NASPAC Team</p>
+          <p>Best regards,<br>HR Team</p>
         `,
       },
       {

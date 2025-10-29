@@ -142,7 +142,15 @@ export function buildJobConfirmationLetterDocDefinition(params: BuildParams) {
       },
       { text: 'PAZ OWUSU BOAKYE (MRS.)', bold: true, fontSize: 11, margin: [0, 0, 0, 5] },
       { text: 'DEPUTY DIRECTOR, HUMAN RESOURCE', fontSize: 11, margin: [0, 0, 0, 10] },
-      { text: 'FOR: DIRECTOR, HUMAN RESOURCE\n cc: Director, Human Resource\n Director, Finance\n Info. Systems Manager\n', fontSize: 11, margin: [0, 0, 0, 0] },
+      { text: [
+      'FOR: DIRECTOR, HUMAN RESOURCE\n',
+      'cc: Director, Human Resource\n',
+      'Director, Finance\n',
+      `Director, ${submission.user.department?.name || 'Info. Systems'}\n`,
+    ],
+    fontSize: 11,
+    margin: [0, 0, 0, 0],
+  },
     ],
     images: {
       ...(letterheadBase64 ? { letterhead: `data:image/png;base64,${letterheadBase64}` } : {}),

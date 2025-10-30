@@ -23,7 +23,7 @@ import { buildJobConfirmationLetterDocDefinition } from 'src/templates/jobConfir
 //   const file = fs.readFileSync(absPath);
 //   return file.toString('base64');
 // }
-const pdfParse = require('pdf-parse'); 
+// const pdfParse = require('pdf-parse'); 
 
 function getBase64Image(filePath: string): string {
   const baseStoragePath = process.env.SERVER_ABSOLUTE_PATH || process.cwd();
@@ -225,44 +225,13 @@ async createUser(dto: CreateUserDto) {
   //   throw new HttpException('Valid phone number with country code required (e.g., +233557484584)', HttpStatus.BAD_REQUEST);
   // }
 
-  // Validate appointment letter content (first page only)
-  if (files.appointmentLetter) {
-    try {
-      const pdfData = await pdfParse(files.appointmentLetter.buffer, { max: 1 });
-      if (!pdfData.text || pdfData.text.trim() === '') {
-
-        throw new HttpException(
-          'The uploaded appointment letter could not be processed. Please ensure it is a text-based PDF containing the required details.',
-          HttpStatus.BAD_REQUEST
-        );
-      }
-
-      const text = pdfData.text.toLowerCase();
-      const requiredKeywords = ['appointment'];
-      const isValidAppointmentLetter = requiredKeywords.every(keyword => text.includes(keyword));
-
-      if (!isValidAppointmentLetter) {
-
-        throw new HttpException(
-          'Uploaded file does not appear to be a valid NSS appointment letter. Please upload the correct document.',
-          HttpStatus.BAD_REQUEST
-        );
-      }
-
-      if (pdfData.numpages < 4) {
-        throw new HttpException('Appointment letter must have at least 4 pages', HttpStatus.BAD_REQUEST);
-      }
-    } catch (error) {
-    console.error('Error parsing PDF:', error);
-    if (error instanceof HttpException) {
-        throw error;
-    }
-    throw new HttpException(
-        'Failed to process the appointment letter. Please ensure it is a valid PDF.',
-        HttpStatus.BAD_REQUEST
-    );
-    }
+   const MAX_SIZE = 10 * 1024 * 1024;
+  if (files.postingLetter && files.postingLetter.size > MAX_SIZE) {
+    throw new HttpException('Posting letter too large (max 10MB)', HttpStatus.BAD_REQUEST);
   }
+  if (files.appointmentLetter && files.appointmentLetter.size > MAX_SIZE) {
+    throw new HttpException('Appointment letter too large (max 10MB)', HttpStatus.BAD_REQUEST);
+  }  
 
     let postingLetterUrl = '';
     let appointmentLetterUrl = '';

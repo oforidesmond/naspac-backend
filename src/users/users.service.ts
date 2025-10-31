@@ -1666,7 +1666,7 @@ async updateDepartment(departmentId: number, dto: UpdateDepartmentDto, requester
       where: { id: dto.supervisorId },
       select: { id: true, role: true, deletedAt: true },
     });
-    if (!supervisor || supervisor.deletedAt || !['ADMIN', 'STAFF'].includes(supervisor.role)) {
+    if (!supervisor || supervisor.deletedAt || !['ADMIN', 'STAFF', 'SUPERVISOR'].includes(supervisor.role)) {
       throw new HttpException('Invalid or deleted supervisor', HttpStatus.BAD_REQUEST);
     }
   }

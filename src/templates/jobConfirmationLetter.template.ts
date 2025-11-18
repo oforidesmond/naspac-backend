@@ -68,6 +68,13 @@ export function buildJobConfirmationLetterDocDefinition(params: BuildParams) {
         fontSize: 11,
         margin: [0, 20, 0, 5],
       },
+       {
+        text: [
+        { text: `Dear ${submission.fullName},` },
+        ],
+        fontSize: 11,
+        margin: [0, 0, 0, 10],
+      },
       {
         text: `APPOINTMENT – NATIONAL SERVICE ${yearRange}`,
         bold: true,
@@ -78,10 +85,10 @@ export function buildJobConfirmationLetterDocDefinition(params: BuildParams) {
       },
       {
         text: [
-          'We are pleased to inform you have been accepted to undertake your National Service at the ',
-          { text: `${departmentName} Department, ${submission.divisionPostedTo}`, bold: true },
+          'We are pleased to inform you that you have been accepted to undertake your National Service at the ',
+          { text: `${departmentName}`, bold: true },
           ' with effect from ',
-          { text: `Friday, November 1, ${currentYear} to Friday, October 31, ${nextYear}`, bold: true },
+          { text: `Monday, December 1, ${currentYear} to Monday, November 30, ${nextYear}`, bold: true },
           '.',
         ],
         fontSize: 11,
@@ -89,48 +96,46 @@ export function buildJobConfirmationLetterDocDefinition(params: BuildParams) {
       },
       {
         text: [
-          'You will be subjected to Ghana Cocoa Board and National Service rules and regulations during',
-          'your service year.',
+          'During your service year, you will be subject to the rules and regulations of both Ghana Cocoa Board and the National Service Scheme. ',
         ],
         fontSize: 11,
         margin: [0, 0, 0, 10],
       },
       {
         text: [
-          'Ghana Cocoa Board will pay your National Service Allowance of ',
-          { text: 'Seven Hundred and Fifteen Ghana Cedis, Fifty-Seven Pesewas (GHc 715.57)', bold: true },
-          ' per month.',
+          'Ghana Cocoa Board will pay you a monthly National Service Allowance of ',
+          { text: 'Seven Hundred and Fifteen Ghana Cedis, Fifty-Seven Pesewas (GHc 715.57). ', bold: true },
+          ' Please note that you will not be covered by the Board’s Insurance Scheme during this period.',
         ],
         fontSize: 11,
         margin: [0, 0, 0, 10],
       },
       {
-        text: 'You will not be covered by the Board’s Insurance Scheme during the period of your Service with the Board.',
+        text: 'We trust that you will work diligently and conduct yourself professionaly during the period for our mutual benefit. Kindly report to the Administrator with two copies of this appointment letter, a copy of your Ghana Card and your Bank Account Details (on a bank statement, cheque leaflet or pay-in-slip).',
         fontSize: 11,
         margin: [0, 0, 0, 10],
-      },
-      {
-        text: 'We hope you will work diligently and comport yourself during the period for our mutual benefit.',
-        fontSize: 11,
-        margin: [0, 0, 0, 10],
-      },
-      {
-        text: 'Kindly report with your Bank Account Details either on a bank statement, copy of cheque leaflet or pay-in-slip.',
-        fontSize: 11,
-        margin: [0, 0, 0, 10],
-        bold: true,
       },
       {
         text: [
           'You will be entitled to one (1) month terminal leave in ',
-          { text: `October ${nextYear}`, bold: true },
-          '.',
+          { text: `November ${nextYear}`, bold: true },
+          '. Should you have any questions or require further clarification, please do not hesitate to reach out on Telephone Number: 0244342058' ,
         ],
         fontSize: 11,
         margin: [0, 0, 0, 10],
       },
       {
-        text: 'Please report to the undersigned for further directives.\nYou can count on our co-operation.',
+        text: 'Welcome to the COCOBOD family, and we wish you a successful and rewarding experience with us.',
+        fontSize: 11,
+        margin: [0, 0, 0, 10],
+      },
+      {
+        text: 'Congratulations!',
+        fontSize: 11,
+        margin: [0, 0, 0, 10],
+      },
+      {
+        text: 'Yours sincerely,',
         fontSize: 11,
         margin: [0, 0, 0, 10],
       },
@@ -145,8 +150,7 @@ export function buildJobConfirmationLetterDocDefinition(params: BuildParams) {
       { text: [
       'FOR: DIRECTOR, HUMAN RESOURCE\n',
       'cc: Director, Human Resource\n',
-      'Director, Finance\n',
-      `Director, ${submission.user.department?.name || 'Info. Systems'}\n`,
+      'Ag. Director, Finance\n',
     ],
     fontSize: 11,
     margin: [0, 0, 0, 0],

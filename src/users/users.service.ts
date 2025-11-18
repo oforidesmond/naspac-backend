@@ -360,20 +360,9 @@ if (files.appointmentLetter) {
     throw new HttpException('Submission not found or deleted', HttpStatus.NOT_FOUND);
   }
 
-  if (submission.status !== 'ENDORSED') {
-    throw new HttpException(
-      `Verification form can only be submitted when status is ENDORSED, current status: ${submission.status}`,
-      HttpStatus.BAD_REQUEST,
-    );
-  }
-
-  if (submission.verificationFormUrl) {
-    throw new HttpException('Verification form already submitted', HttpStatus.BAD_REQUEST);
-  }
-
   // Validate file
   if (!verificationForm || verificationForm.mimetype !== 'application/pdf') {
-    throw new HttpException('Verification form must be a PDF', HttpStatus.BAD_REQUEST);
+    throw new HttpException('Validated Letter must be a PDF', HttpStatus.BAD_REQUEST);
   }
 
   // Upload file to local storage
@@ -412,8 +401,8 @@ if (files.appointmentLetter) {
 
       await this.prisma.notification.create({
         data: {
-          title: 'Submitted Verification Form',
-          description: 'Your verification form has been submitted successfully.',
+          title: 'Submitted Validated Letter',
+          description: 'Your validated letter has been submitted successfully.',
           timestamp: new Date(),
           iconType: 'USER',
           role: 'PERSONNEL',
@@ -423,8 +412,8 @@ if (files.appointmentLetter) {
 
       await prisma.notification.create({
       data: {
-        title: 'New Verification Form Submitted',
-        description: `A verification form for submission (ID: ${submission.id}, NSS: ${user.nssNumber || 'Unknown'}) has been submitted by Personnel (ID: ${userId}).`,
+        title: 'New Validated Letter Submitted',
+        description: `A validated letter for submission (ID: ${submission.id}, NSS: ${user.nssNumber || 'Unknown'}) has been submitted by Personnel (ID: ${userId}).`,
         timestamp: new Date(),
         iconType: 'BELL',
         role: 'STAFF',
@@ -433,8 +422,8 @@ if (files.appointmentLetter) {
 
       await prisma.notification.create({
       data: {
-        title: 'New Verification Form Submitted',
-        description: `A verification form for submission (ID: ${submission.id}, NSS: ${user.nssNumber || 'Unknown'}) has been submitted by Personnel (Name: ${updatedSubmission.fullName}).`,
+        title: 'New Validated Letter Submitted',
+        description: `A validated letter for submission (ID: ${submission.id}, NSS: ${user.nssNumber || 'Unknown'}) has been submitted by Personnel (Name: ${updatedSubmission.fullName}).`,
         timestamp: new Date(),
         iconType: 'BELL',
         role: 'ADMIN',
@@ -705,7 +694,7 @@ async updateSubmissionStatus(
  ENDORSED: ['VALIDATED', 'REJECTED'],
  VALIDATED: ['COMPLETED', 'REJECTED'],
  REJECTED: ['PENDING'], // Allow resubmission
- COMPLETED: [],
+ COMPLETED: ['VALIDATED'],
  };
 
  if (
@@ -721,9 +710,9 @@ async updateSubmissionStatus(
  return this.prisma.$transaction(async (prisma) => {
  let jobConfirmationLetterUrl = submission.jobConfirmationLetterUrl;
 
- if (dto.status === 'VALIDATED' && !jobConfirmationLetterUrl) {
+ if (dto.status === 'VALIDATED') {
  const currentYear = new Date().getFullYear();
- const yearRange = currentYear === 2025 ? '2024/2025' : `${currentYear}/${currentYear + 1}`;
+ const yearRange = currentYear === 2025 ? '2025/2026' : `${currentYear}/${currentYear + 1}`;
  const nextYear = currentYear + 1;
  const today = moment().format('DD/MM/YYYY');
  const departmentName = submission.user.department.name;

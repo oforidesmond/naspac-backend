@@ -1899,19 +1899,6 @@ async deleteStaff(staffId: number, requesterId: number) {
       },
     });
 
-    for (const user of users) {
-      await prisma.notification.create({
-        data: {
-          title: 'Department Assignment',
-          description: `You have been assigned to department ${department.name}.`,
-          timestamp: new Date(),
-          iconType: 'USER',
-          role: 'PERSONNEL',
-          userId: user.id,
-        },
-      });
-    }
-
     await prisma.notification.create({
       data: {
         title: 'Personnel Department Reassigned',

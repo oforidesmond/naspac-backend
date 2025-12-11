@@ -102,7 +102,7 @@ async loginStaffAdmin(staffId: string, password: string) {
     if (!user.tfaSecret || (!user.phoneNumber && !user.email)) {
       throw new HttpException('2FA is enabled but no phone number or email is set', HttpStatus.BAD_REQUEST);
     }
-    await this.smsService.sendOtp(user.id);
+    // await this.smsService.sendOtp(user.id);
     const tempPayload = {
       sub: user.id,
       identifier: user.staffId,
@@ -157,7 +157,7 @@ async loginStaffAdmin(staffId: string, password: string) {
     //   throw new HttpException('Phone number not set. Please complete onboarding.', HttpStatus.BAD_REQUEST);
     // }
     // Personnel always require 2FA
-    await this.smsService.sendOtp(user.id);
+    // await this.smsService.sendOtp(user.id);
     const tempPayload = { sub: user.id, userId: user.id, identifier: user.nssNumber, role: user.role, name: user.name, email: user.email || '', phoneNumber: user.phoneNumber, isTfaRequired: true, isTfaEnabled: user.isTfaEnabled };
     return {
       tempAccessToken: this.jwtService.sign(tempPayload, { expiresIn: '5m' }),
@@ -506,7 +506,7 @@ async loginStaffAdmin(staffId: string, password: string) {
   if (!user) {
     throw new HttpException('User not found', HttpStatus.BAD_REQUEST);
   }
-  await this.smsService.sendOtp(userId);
+  // await this.smsService.sendOtp(userId);
   return { message: 'OTP resent to your phone' };
   }
 

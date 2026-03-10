@@ -8,6 +8,7 @@ import { Queue } from 'bull';
 import { createBullBoard } from '@bull-board/api';
 import { BullAdapter } from '@bull-board/api/bullAdapter';
 import * as express from 'express';
+import * as compression from 'compression';
 // import { ValidationPipe } from '@nestjs/common';
 
 async function bootstrap() {
@@ -22,6 +23,8 @@ async function bootstrap() {
    allowedHeaders: 'Content-Type, Authorization',
    credentials: true,
   });
+
+  app.use(compression());
 
   // Bull Dashboard
   const serverAdapter = new ExpressAdapter();

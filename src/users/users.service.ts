@@ -300,35 +300,31 @@ if (files.appointmentLetter) {
       },
     });
 
-    await prisma.notification.create({
-      data: {
-        title: 'Submission Created',
-        description: `Your onboarding submission has been submitted and is pending review.`,
-        timestamp: new Date(),
-        iconType: 'USER',
-        userId,
-        role: 'PERSONNEL',
-      },
-    });
-
-    await prisma.notification.create({
-      data: {
-        title: 'New Submission Received',
-        description: `A new submission (ID: ${submission.id}, NSS: ${dto.nssNumber}) has been submitted by Personnel (ID: ${userId}).`,
-        timestamp: new Date(),
-        iconType: 'BELL',
-        role: 'ADMIN',
-      },
-    });
-
-    await prisma.notification.create({
-      data: {
-        title: 'New Submission Received',
-        description: `A new submission (ID: ${submission.id}, NSS: ${dto.nssNumber}) has been submitted by Personnel (ID: ${userId}).`,
-        timestamp: new Date(),
-        iconType: 'BELL',
-        role: 'STAFF',
-      },
+    await prisma.notification.createMany({
+      data: [
+        {
+          title: 'Submission Created',
+          description: `Your onboarding submission has been submitted and is pending review.`,
+          timestamp: new Date(),
+          iconType: 'USER',
+          userId,
+          role: 'PERSONNEL',
+        },
+        {
+          title: 'New Submission Received',
+          description: `A new submission (ID: ${submission.id}, NSS: ${dto.nssNumber}) has been submitted by Personnel (ID: ${userId}).`,
+          timestamp: new Date(),
+          iconType: 'BELL',
+          role: 'ADMIN',
+        },
+        {
+          title: 'New Submission Received',
+          description: `A new submission (ID: ${submission.id}, NSS: ${dto.nssNumber}) has been submitted by Personnel (ID: ${userId}).`,
+          timestamp: new Date(),
+          iconType: 'BELL',
+          role: 'STAFF',
+        },
+      ],
     });
 
     await this.notificationsService.sendSubmissionConfirmationEmail(
@@ -399,51 +395,49 @@ if (files.appointmentLetter) {
       },
     });
 
-      await this.prisma.notification.create({
-        data: {
-          title: 'Submitted Validated Letter',
-          description: 'Your validated letter has been submitted successfully.',
-          timestamp: new Date(),
-          iconType: 'USER',
-          role: 'PERSONNEL',
-          userId: userId,
-        },
+      await this.prisma.notification.createMany({
+        data: [
+          {
+            title: 'Submitted Validated Letter',
+            description: 'Your validated letter has been submitted successfully.',
+            timestamp: new Date(),
+            iconType: 'USER',
+            role: 'PERSONNEL',
+            userId: userId,
+          },
+          {
+            title: 'New Validated Letter Submitted',
+            description: `A validated letter for submission (ID: ${submission.id}, NSS: ${user.nssNumber || 'Unknown'}) has been submitted by Personnel (ID: ${userId}).`,
+            timestamp: new Date(),
+            iconType: 'BELL',
+            role: 'STAFF',
+          },
+          {
+            title: 'New Validated Letter Submitted',
+            description: `A validated letter for submission (ID: ${submission.id}, NSS: ${user.nssNumber || 'Unknown'}) has been submitted by Personnel (Name: ${updatedSubmission.fullName}).`,
+            timestamp: new Date(),
+            iconType: 'BELL',
+            role: 'ADMIN',
+          },
+        ],
       });
-
-      await prisma.notification.create({
-      data: {
-        title: 'New Validated Letter Submitted',
-        description: `A validated letter for submission (ID: ${submission.id}, NSS: ${user.nssNumber || 'Unknown'}) has been submitted by Personnel (ID: ${userId}).`,
-        timestamp: new Date(),
-        iconType: 'BELL',
-        role: 'STAFF',
-      },
-    });
-
-      await prisma.notification.create({
-      data: {
-        title: 'New Validated Letter Submitted',
-        description: `A validated letter for submission (ID: ${submission.id}, NSS: ${user.nssNumber || 'Unknown'}) has been submitted by Personnel (Name: ${updatedSubmission.fullName}).`,
-        timestamp: new Date(),
-        iconType: 'BELL',
-        role: 'ADMIN',
-      },
-    });
 
     const staffUsers = await prisma.user.findMany({
       where: { role: 'STAFF', deletedAt: null },
       select: { email: true, name: true },
     });
 
-    for (const staff of staffUsers) {
-      await this.notificationsService.sendVerificationFormEmail(
-        staff.email,
-        staff.name,
-        updatedSubmission.fullName,
-        updatedSubmission.nssNumber,
-        submission.id
-      );
-    }
+    await Promise.all(
+      staffUsers.map((staff) =>
+        this.notificationsService.sendVerificationFormEmail(
+          staff.email,
+          staff.name,
+          updatedSubmission.fullName,
+          updatedSubmission.nssNumber,
+          submission.id
+        )
+      )
+    );
 
     return updatedSubmission;
   });
@@ -980,31 +974,21 @@ async uploadAppointmentSignature(userId: number, file: Express.Multer.File) {
   }
   const currentYear = new Date().getFullYear();
   
-  const counts = await Promise.all(
-    dto.statuses.map(async (status) => {
-      const submissionIds = await this.prisma.auditLog.findMany({
-        where: {
-          action: `STATUS_CHANGED_TO_${status}`,
-          submission: {
-            deletedAt: null,
-            user: {
-              role: 'PERSONNEL',
-            },
-            yearOfNss: currentYear,
-          },
-        },
-        select: {
-          submissionId: true,
-        },
-        distinct: ['submissionId'],
-      });
+  const statusGroups = await this.prisma.submission.groupBy({
+    by: ['status'],
+    where: {
+      status: { in: dto.statuses as any },
+      deletedAt: null,
+      user: { role: 'PERSONNEL' },
+      yearOfNss: currentYear,
+    },
+    _count: { id: true },
+  });
 
-      return {
-        status,
-        count: submissionIds.length,
-      };
-    })
-  );
+  const counts = dto.statuses.map((status) => ({
+    status,
+    count: statusGroups.find((g) => g.status === status)?._count?.id || 0,
+  }));
 
   const totalCount = await this.prisma.submission.count({
     where: {
@@ -1411,23 +1395,18 @@ async uploadAppointmentSignature(userId: number, file: Express.Multer.File) {
       },
     }),
 
-    // 6. Submission status counts for PENDING, PENDING_ENDORSEMENT, REJECTED using AuditLog
-    Promise.all(
-      ['PENDING_ENDORSEMENT', 'REJECTED'].map(async (status) => {
-        const submissionIds = await this.prisma.auditLog.findMany({
-          where: {
-            action: `STATUS_CHANGED_TO_${status}`,
-            submission: {
-              deletedAt: null,
-              user: { role: 'PERSONNEL', deletedAt: null },
-              yearOfNss: currentYear,
-            },
-          },
-          select: { submissionId: true },
-          distinct: ['submissionId'],
-        });
-        return { status, count: submissionIds.length };
-      })
+    // 6. Submission status counts using groupBy instead of AuditLog
+    this.prisma.submission.groupBy({
+      by: ['status'],
+      where: {
+        status: { in: ['PENDING_ENDORSEMENT', 'REJECTED'] },
+        deletedAt: null,
+        user: { role: 'PERSONNEL', deletedAt: null },
+        yearOfNss: currentYear,
+      },
+      _count: { id: true },
+    }).then((groups) =>
+      groups.map((g) => ({ status: g.status, count: g._count.id }))
     ),
 
     // 7. Onboarded student count

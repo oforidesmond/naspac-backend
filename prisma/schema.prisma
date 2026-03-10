@@ -42,6 +42,7 @@ model User {
   departmentsSupervised Department[] @relation("DepartmentSupervisor")
   templatesCreated    Template[]    @relation("UserTemplates")
   notifications       Notification[]
+  @@index([role, deletedAt])
 }
 
 model Submission {
@@ -70,6 +71,9 @@ model Submission {
   documents           Document[]
   auditLogs           AuditLog[]
   @@unique([userId, nssNumber])
+  @@index([userId, deletedAt])
+  @@index([status, yearOfNss, deletedAt])
+  @@index([yearOfNss, deletedAt])
 }
 
 model Template {
@@ -126,6 +130,8 @@ model AuditLog {
   details             String?
   createdAt           DateTime      @default(now())
   submission          Submission?   @relation(fields: [submissionId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  @@index([action, submissionId])
+  @@index([submissionId])
 }
 
 model PasswordResetToken {
@@ -161,6 +167,8 @@ model Notification {
   user        User?     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+  @@index([userId, role])
+  @@index([role])
 }
 
 enum Role {

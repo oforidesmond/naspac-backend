@@ -460,19 +460,19 @@ async loginStaffAdmin(staffId: string, password: string) {
     throw new HttpException('Valid phone number with country code required when enabling 2FA (e.g., +233557484584)', HttpStatus.BAD_REQUEST);
   }
 
-  const existingUser = await this.usersService.findByNssNumberOrStaffId(staffId);
+  const [existingUser, existingEmail, existingPhone] = await Promise.all([
+    this.usersService.findByNssNumberOrStaffId(staffId),
+    this.usersService.findByEmail(email),
+    phoneNumber ? this.usersService.findByPhoneNumber(phoneNumber) : null,
+  ]);
   if (existingUser) {
     throw new HttpException('Staff ID already registered', HttpStatus.BAD_REQUEST);
   }
-  const existingEmail = await this.usersService.findByEmail(email);
   if (existingEmail) {
     throw new HttpException('Email already registered', HttpStatus.BAD_REQUEST);
   }
-  if (phoneNumber) {
-    const existingPhone = await this.usersService.findByPhoneNumber(phoneNumber);
-    if (existingPhone) {
-      throw new HttpException('Phone number already registered', HttpStatus.BAD_REQUEST);
-    }
+  if (existingPhone) {
+    throw new HttpException('Phone number already registered', HttpStatus.BAD_REQUEST);
   }
 
   if (!['STAFF', 'ADMIN', 'SUPERVISOR'].includes(role)) {

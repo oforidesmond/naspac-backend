@@ -1,6 +1,5 @@
 import { Controller, Post, Body, UseGuards, Request, Get, Req, HttpException, HttpStatus, Param, Delete } from '@nestjs/common';
 import { AuthService } from './auth.service';
-import { RateLimitGuard } from './rate-limit.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { InitOnboardingDto } from '../users/dto/init-onboarding.dto';
 import { JwtAuthGuard } from 'src/common/guards/auth-guard';
@@ -23,19 +22,17 @@ export class AuthController {
   ) {}
 
   @Post('login-personnel')
-  @UseGuards(RateLimitGuard)
   async loginPersonnel(@Body() body: LoginPersonnelDto) {
     return this.authService.loginPersonnel(body.nssNumber, body.password);
   }
 
   @Post('login-staff-admin')
-  @UseGuards(RateLimitGuard)
   async loginStaffAdmin(@Body() body: LoginStaffAdminDto) {
     return this.authService.loginStaffAdmin(body.staffId, body.password);
   }
 
    @Post('verifyTfa')
-  @UseGuards(JwtAuthGuard, RateLimitGuard)
+  @UseGuards(JwtAuthGuard)
   async verifyTfa(@Req() req: any, @Body() body: TwoFaDto) {
     if (!req.user.isTfaRequired) {
       throw new HttpException('2FA not required for this token', HttpStatus.BAD_REQUEST);
@@ -44,7 +41,7 @@ export class AuthController {
   }
 
   @Post('resendTfa')
-  @UseGuards(JwtAuthGuard, RateLimitGuard)
+  @UseGuards(JwtAuthGuard)
   async resendOtp(@Req() req: any) {
     if (!req.user.isTfaRequired) {
       throw new HttpException('No pending 2FA verification', HttpStatus.BAD_REQUEST);
@@ -72,26 +69,23 @@ export class AuthController {
   }
   
     @Post('init-user')
-  @UseGuards(JwtAuthGuard, RolesGuard, RateLimitGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   async initUser(@Body() body: InitUserDto, @Request() req) {
     return this.authService.initUser(body.staffId, body.email, body.name, body.role, req.user, body.phoneNumber, body.enable2FA);
   }
 
    @Post('request-forgot-password')
-  @UseGuards(RateLimitGuard)
   async requestForgotPassword(@Body() body: RequestForgotPasswordDto) {
     return this.authService.requestForgotPassword(body.email);
   }
 
   @Post('forgot-password')
-  @UseGuards(RateLimitGuard)
   async forgotPassword(@Body() body: ForgotPasswordDto) {
     return this.authService.forgotPassword(body.token, body.password);
   }
 
   @Post('onboarding-reset-password')
-  @UseGuards(RateLimitGuard)
   async onboardingResetPassword(@Body() body: OnboardingResetPasswordDto) {
     return this.authService.onboardingResetPassword(
       body.nssNumber,

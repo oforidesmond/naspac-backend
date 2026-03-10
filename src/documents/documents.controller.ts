@@ -4,7 +4,6 @@ import { JwtAuthGuard } from 'src/common/guards/auth-guard';
 import { RolesGuard } from 'src/common/guards/roles-guard';
 import { Roles } from 'src/common/decorators/roles.decorator';
 import { DocumentsService } from './documents.service';
-import { RateLimitGuard } from 'src/auth/rate-limit.guard';
 import { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 
@@ -120,7 +119,7 @@ console.log('Raw URL:', submission.appointmentLetterUrl, 'Parsed fileName:', fil
   }
 
 @Get('personnel/download-appointment-letter')
-@UseGuards(JwtAuthGuard, RateLimitGuard)
+@UseGuards(JwtAuthGuard)
 async downloadAppointmentLetter(
   @Request() req,
   @Query('type') type: 'appointment' | 'endorsed' | 'job_confirmation',
@@ -140,7 +139,7 @@ async downloadAppointmentLetter(
 
   //upload template
   @Post('/upload-template')
-@UseGuards(JwtAuthGuard, RolesGuard, RateLimitGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('ADMIN')
 @UseInterceptors(FileInterceptor('template', {
   fileFilter: (req, file, cb) => {

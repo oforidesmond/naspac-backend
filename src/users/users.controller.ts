@@ -6,7 +6,6 @@ import { JwtAuthGuard } from 'src/common/guards/auth-guard';
 import { RolesGuard } from 'src/common/guards/roles-guard';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { GetSubmissionStatusCountsDto, SubmitOnboardingDto, UpdateSubmissionStatusDto } from './dto/submit-onboarding.dto';
-import { RateLimitGuard } from 'src/auth/rate-limit.guard';
 import { LocalStorageService } from 'src/documents/local-storage.service';
 import { PrismaService } from 'prisma/prisma.service';
 import { UpdateStaffDto } from './dto/update-user.dto';
@@ -95,7 +94,7 @@ async getUserProfile(@Request() req) {
   }
 
  @Post('submit-onboarding')
-  @UseGuards(JwtAuthGuard, RolesGuard, RateLimitGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('PERSONNEL')
   @UseInterceptors(FilesInterceptor('files', 2, {
     fileFilter: (req, file, cb) => {
@@ -227,7 +226,7 @@ async getPersonnelStatus(@Request() req) {
   }
 
   @Post('submit-verification-form')
-@UseGuards(JwtAuthGuard, RolesGuard, RateLimitGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('PERSONNEL')
 @UseInterceptors(FileInterceptor('verificationForm', {
   fileFilter: (req, file, cb) => {
@@ -246,7 +245,7 @@ async submitVerificationForm(
   }
 
    @Patch('staff/:id')
-  @UseGuards(JwtAuthGuard, RolesGuard, RateLimitGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   async updateStaff(
     @Param('id', ParseIntPipe) id: number,
@@ -257,7 +256,7 @@ async submitVerificationForm(
   }
 
   @Patch('department/:id')
-@UseGuards(JwtAuthGuard, RolesGuard, RateLimitGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('ADMIN')
 async updateDepartment(
   @Param('id', ParseIntPipe) id: number,
@@ -268,21 +267,21 @@ async updateDepartment(
 }
 
 @Delete('staff/:id/delete')
-  @UseGuards(JwtAuthGuard, RolesGuard, RateLimitGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   async deleteStaff(@Param('id', ParseIntPipe) id: number, @Request() req) {
     return this.usersService.deleteStaff(id, req.user.id);
   }
 
   @Delete('department/:id')
-  @UseGuards(JwtAuthGuard, RolesGuard, RateLimitGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   async deleteDepartment(@Param('id', ParseIntPipe) id: number, @Request() req) {
     return this.usersService.deleteDepartment(id, req.user.id);
   }
 
   @Patch('change-department')
-  @UseGuards(JwtAuthGuard, RolesGuard, RateLimitGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN', 'STAFF')
   async changePersonnelDepartment(
     @Body() dto: ChangePersonnelDepartmentDto,

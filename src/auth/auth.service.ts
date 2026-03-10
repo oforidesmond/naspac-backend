@@ -36,6 +36,10 @@ export class AuthService {
       );
     }
 
+    if (!user.password) {
+      throw new HttpException('Password not set. Please reset your password.', HttpStatus.UNAUTHORIZED);
+    }
+
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
       throw new HttpException('Invalid staff ID or password', HttpStatus.UNAUTHORIZED);
@@ -76,6 +80,10 @@ export class AuthService {
   if (user.deletedAt !== null) {
     throw new HttpException('Account is disabled. Please contact support.', HttpStatus.UNAUTHORIZED);
   }
+  if (!user.password) {
+    throw new HttpException('Password not set. Please reset your password.', HttpStatus.UNAUTHORIZED);
+  }
+
   const isPasswordValid = await bcrypt.compare(password, user.password);
   if (!isPasswordValid) {
     throw new HttpException('Invalid NSS number or password', HttpStatus.UNAUTHORIZED);

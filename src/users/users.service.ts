@@ -562,7 +562,8 @@ async getGhanaUniversities() {
   }
 
    async getAllSubmissions(year?: number) {
-    const currentYear = year || new Date().getFullYear();
+    const now = new Date();
+    const currentYear = year || (now.getMonth() >= 9 ? now.getFullYear() : now.getFullYear() - 1);
     const submissions = await this.prisma.submission.findMany({
         where: {
       yearOfNss: currentYear,
@@ -609,7 +610,8 @@ async getGhanaUniversities() {
   }
 
   async getSubmissions(year?: number) {
-    const currentYear = year || new Date().getFullYear();
+    const now = new Date();
+    const currentYear = year || (now.getMonth() >= 9 ? now.getFullYear() : now.getFullYear() - 1);
     const submissions = await this.prisma.submission.findMany({
       where: { deletedAt: null, yearOfNss: currentYear },
       select: {
@@ -973,7 +975,8 @@ async uploadAppointmentSignature(userId: number, file: Express.Multer.File) {
       HttpStatus.BAD_REQUEST,
     );
   }
-  const currentYear = dto.year || new Date().getFullYear();
+  const now = new Date();
+  const currentYear = dto.year || (now.getMonth() >= 9 ? now.getFullYear() : now.getFullYear() - 1);
   
   const statusGroups = await this.prisma.submission.groupBy({
     by: ['status'],
@@ -1144,7 +1147,8 @@ async uploadAppointmentSignature(userId: number, file: Express.Multer.File) {
       HttpStatus.FORBIDDEN,
     );
   }
-  const currentYear = dto.year || new Date().getFullYear();
+  const now = new Date();
+  const currentYear = dto.year || (now.getMonth() >= 9 ? now.getFullYear() : now.getFullYear() - 1);
 
   const users = await this.prisma.user.findMany({
     where: {
@@ -1332,7 +1336,8 @@ async uploadAppointmentSignature(userId: number, file: Express.Multer.File) {
     }
   }
 
-  const currentYear = year || new Date().getFullYear();
+  const now = new Date();
+  const currentYear = year || (now.getMonth() >= 9 ? now.getFullYear() : now.getFullYear() - 1);
   const nssNumberPattern = `%${currentYear}`;
 
   const [
@@ -1459,7 +1464,8 @@ async uploadAppointmentSignature(userId: number, file: Express.Multer.File) {
   }
 
   async getPersonnelStatus(userId: number, year?: number) {
-  const currentYear = year || new Date().getFullYear();
+  const now = new Date();
+  const currentYear = year || (now.getMonth() >= 9 ? now.getFullYear() : now.getFullYear() - 1);
   const user = await this.prisma.user.findUnique({
     where: { id: userId },
     select: { id: true, role: true, deletedAt: true },

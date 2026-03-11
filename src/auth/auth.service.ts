@@ -254,7 +254,8 @@ async loginStaffAdmin(staffId: string, password: string) {
   }
 
  async getOnboardedUsers(year?: number) {
-  const targetYear = year || new Date().getFullYear();
+  const now = new Date();
+  const targetYear = year || (now.getMonth() >= 9 ? now.getFullYear() : now.getFullYear() - 1);
   const startOfYear = new Date(targetYear, 0, 1);
   const endOfYear = new Date(targetYear + 1, 0, 1);
 

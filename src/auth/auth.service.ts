@@ -253,10 +253,10 @@ async loginStaffAdmin(staffId: string, password: string) {
     return { message: 'Onboarding link sent to email', email };
   }
 
- async getOnboardedUsers() {
-  const now = new Date();
-  const startOfYear = new Date(now.getFullYear(), 0, 1);
-  const endOfYear = new Date(now.getFullYear() + 1, 0, 1);
+ async getOnboardedUsers(year?: number) {
+  const targetYear = year || new Date().getFullYear();
+  const startOfYear = new Date(targetYear, 0, 1);
+  const endOfYear = new Date(targetYear + 1, 0, 1);
 
   const users = await this.prisma.user.findMany({
     where: {

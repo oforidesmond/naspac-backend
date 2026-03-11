@@ -67,4 +67,8 @@ export class GetSubmissionStatusCountsDto {
   @IsArray()
   @IsEnum(SubmissionStatus, { each: true })
   statuses: SubmissionStatus[];
+
+  @IsOptional()
+  @IsInt()
+  year?: number;
 }

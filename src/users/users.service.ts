@@ -561,8 +561,8 @@ async getGhanaUniversities() {
     return { hasSubmitted: !!submission };
   }
 
-   async getAllSubmissions() {
-    const currentYear = new Date().getFullYear();
+   async getAllSubmissions(year?: number) {
+    const currentYear = year || new Date().getFullYear();
     const submissions = await this.prisma.submission.findMany({
         where: {
       yearOfNss: currentYear,
@@ -608,9 +608,10 @@ async getGhanaUniversities() {
     }));
   }
 
-  async getSubmissions() {
+  async getSubmissions(year?: number) {
+    const currentYear = year || new Date().getFullYear();
     const submissions = await this.prisma.submission.findMany({
-      where: { deletedAt: null },
+      where: { deletedAt: null, yearOfNss: currentYear },
       select: {
         id: true,
         fullName: true,
@@ -972,7 +973,7 @@ async uploadAppointmentSignature(userId: number, file: Express.Multer.File) {
       HttpStatus.BAD_REQUEST,
     );
   }
-  const currentYear = new Date().getFullYear();
+  const currentYear = dto.year || new Date().getFullYear();
   
   const statusGroups = await this.prisma.submission.groupBy({
     by: ['status'],
@@ -1143,7 +1144,7 @@ async uploadAppointmentSignature(userId: number, file: Express.Multer.File) {
       HttpStatus.FORBIDDEN,
     );
   }
-  const currentYear = new Date().getFullYear();
+  const currentYear = dto.year || new Date().getFullYear();
 
   const users = await this.prisma.user.findMany({
     where: {
@@ -1317,7 +1318,7 @@ async uploadAppointmentSignature(userId: number, file: Express.Multer.File) {
   });
   }
   
-  async getReportCounts(requesterId?: number) {
+  async getReportCounts(requesterId?: number, year?: number) {
   if (requesterId) {
     const requester = await this.prisma.user.findUnique({
       where: { id: requesterId, deletedAt: null },
@@ -1331,7 +1332,7 @@ async uploadAppointmentSignature(userId: number, file: Express.Multer.File) {
     }
   }
 
-  const currentYear = new Date().getFullYear();
+  const currentYear = year || new Date().getFullYear();
   const nssNumberPattern = `%${currentYear}`;
 
   const [
@@ -1352,6 +1353,7 @@ async uploadAppointmentSignature(userId: number, file: Express.Multer.File) {
     submissions: {
       some: {
         status: { in: [ 'VALIDATED', 'COMPLETED'] },
+        yearOfNss: currentYear,
       },
     },
   },
@@ -1370,7 +1372,7 @@ async uploadAppointmentSignature(userId: number, file: Express.Multer.File) {
     // 4. Personnel by department
     this.prisma.user.groupBy({
       by: ['departmentId'],
-      where: { role: 'PERSONNEL', deletedAt: null, departmentId: { not: null } },
+      where: { role: 'PERSONNEL', deletedAt: null, departmentId: { not: null }, submissions: { some: { yearOfNss: currentYear, deletedAt: null } } },
       _count: { id: true },
     }).then(async (groups) => {
       const departmentIds = groups.map((g) => g.departmentId).filter((id) => id !== null);
@@ -1456,7 +1458,8 @@ async uploadAppointmentSignature(userId: number, file: Express.Multer.File) {
    };
   }
 
-  async getPersonnelStatus(userId: number) {
+  async getPersonnelStatus(userId: number, year?: number) {
+  const currentYear = year || new Date().getFullYear();
   const user = await this.prisma.user.findUnique({
     where: { id: userId },
     select: { id: true, role: true, deletedAt: true },
@@ -1469,7 +1472,7 @@ async uploadAppointmentSignature(userId: number, file: Express.Multer.File) {
   }
 
   const submission = await this.prisma.submission.findFirst({
-    where: { userId },
+    where: { userId, yearOfNss: currentYear, deletedAt: null },
     select: { id: true, status: true, deletedAt: true },
   });
 

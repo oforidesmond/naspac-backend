@@ -1,4 +1,4 @@
-import { Controller, Post, Body, UseGuards, Request, Get, Req, HttpException, HttpStatus, Param, Delete } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, Request, Get, Req, HttpException, HttpStatus, Param, Delete, Query } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { Roles } from '../common/decorators/roles.decorator';
 import { InitOnboardingDto } from '../users/dto/init-onboarding.dto';
@@ -96,9 +96,9 @@ export class AuthController {
   }
 
   @Get('onboarded')
-  async getOnboardedUsers() {
+  async getOnboardedUsers(@Query('year') year?: string) {
     try {
-      return await this.authService.getOnboardedUsers();
+      return await this.authService.getOnboardedUsers(year ? parseInt(year) : undefined);
     } catch (error) {
       throw new HttpException(
         'Failed to fetch onboarded users',

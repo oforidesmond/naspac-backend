@@ -1,4 +1,4 @@
-import { Controller, Post, Body, UseGuards, UseInterceptors, UploadedFiles, Request, Get, ParseIntPipe, Param, HttpException, HttpStatus, UploadedFile, Patch, Delete, Req } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, UseInterceptors, UploadedFiles, Request, Get, ParseIntPipe, Param, HttpException, HttpStatus, UploadedFile, Patch, Delete, Req, Query } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { AssignPersonnelToDepartmentDto, ChangePersonnelDepartmentDto, CreateDepartmentDto, CreateUserDto, GetPersonnelDto, UpdateDepartmentDto } from './dto/create-user.dto';
 import { Roles } from 'src/common/decorators/roles.decorator';
@@ -126,16 +126,16 @@ async getUserProfile(@Request() req) {
     @Get('submissions')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('STAFF', 'ADMIN')
-  async getSubmissions() {
-    return this.usersService.getAllSubmissions();
+  async getSubmissions(@Query('year') year?: string) {
+    return this.usersService.getAllSubmissions(year ? parseInt(year) : undefined);
   }
 
   //all submissions
   @Get('total-submissions')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('STAFF', 'ADMIN')
-  async getTotalSubmissions() {
-    return this.usersService.getSubmissions();
+  async getTotalSubmissions(@Query('year') year?: string) {
+    return this.usersService.getSubmissions(year ? parseInt(year) : undefined);
   }
 
     @Get('onboarding-status')
@@ -214,15 +214,15 @@ async assignPersonnelToDepartment(
   @Get('reports-counts')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('ADMIN', 'STAFF')
-async getReportCounts(@Request() req) {
-  return this.usersService.getReportCounts(req.user.id);
+async getReportCounts(@Request() req, @Query('year') year?: string) {
+  return this.usersService.getReportCounts(req.user.id, year ? parseInt(year) : undefined);
   }
 
 @Get('personnel-status')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('PERSONNEL','ADMIN', 'STAFF')
-async getPersonnelStatus(@Request() req) {
-  return this.usersService.getPersonnelStatus(req.user.id);
+async getPersonnelStatus(@Request() req, @Query('year') year?: string) {
+  return this.usersService.getPersonnelStatus(req.user.id, year ? parseInt(year) : undefined);
   }
 
   @Post('submit-verification-form')

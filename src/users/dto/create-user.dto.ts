@@ -74,6 +74,10 @@ export class GetPersonnelDto {
   @IsArray()
   @IsEnum(SubmissionStatus, { each: true })
   statuses?: SubmissionStatus[];
+
+  @IsOptional()
+  @IsInt()
+  year?: number;
 }
 
 export class AssignPersonnelToDepartmentDto {
